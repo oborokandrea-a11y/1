@@ -1,0 +1,6 @@
+document.addEventListener('DOMContentLoaded',()=>{
+ document.querySelectorAll('[data-password-toggle]').forEach(b=>b.addEventListener('click',()=>{const input=b.parentElement.querySelector('input');if(input){input.type=input.type==='password'?'text':'password';b.textContent=input.type==='password'?'◉':'◌';}}));
+ document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',async()=>{const node=document.querySelector(b.dataset.copy);if(!node)return;try{await navigator.clipboard.writeText(node.value||node.textContent);b.textContent='Скопировано ✓';setTimeout(()=>b.textContent='Скопировать',1800);}catch(e){node.select();document.execCommand('copy');b.textContent='Скопировано ✓';}}));
+ document.querySelectorAll('[data-toggle-sidebar]').forEach(b=>b.addEventListener('click',()=>document.querySelector('#sidebar')?.classList.toggle('open')));
+ document.querySelectorAll('form[data-confirm]').forEach(f=>f.addEventListener('submit',e=>{if(!confirm(f.dataset.confirm))e.preventDefault()}));
+});

@@ -1,0 +1,47 @@
+"""Safe idempotent first-start initializer for the connected production database.
+
+Never prints passwords and never replaces an existing manager account.
+"""
+import csv
+import os
+from sqlalchemy import select
+from app.database import Base, engine, SessionLocal
+from app.models import User, BaselineObservation
+from app.security import hash_password, validate_password
+from app.settings import ROOT, settings
+
+Base.metadata.create_all(engine)
+with SessionLocal() as db:
+    if not db.scalar(select(User.id).where(User.role == "MANAGER")):
+        username = os.getenv("INITIAL_ADMIN_USERNAME", "").strip().lower()
+        password = os.getenv("INITIAL_ADMIN_PASSWORD", "")
+        full_name = os.getenv("INITIAL_ADMIN_NAME", "Руководитель проекта Цифра").strip()
+        if len(username) < 4 or not validate_password(password):
+            raise SystemExit("First launch needs INITIAL_ADMIN_USERNAME and strong INITIAL_ADMIN_PASSWORD in hosting secrets.")
+        if db.scalar(select(User.id).where(User.username == username)):
+            raise SystemExit("INITIAL_ADMIN_USERNAME is already taken; choose another.")
+        db.add(User(username=username, full_name=full_name, role="MANAGER", password_hash=hash_password(password)))
+        db.commit()
+        print("First manager account initialized; password not printed.")
+
+    # Original source is a de-identified pilot baseline. Do not import real identifiable contracts.
+    path = ROOT / "data" / "baseline_103_anonymized.csv"
+    if path.exists():
+        count = 0
+        with path.open(encoding="utf-8-sig", newline="") as handle:
+            for item in csv.DictReader(handle):
+                if db.scalar(select(BaselineObservation.id).where(
+                    BaselineObservation.source_reference == item["source_reference"]
+                )):
+                    continue
+                db.add(BaselineObservation(
+                    source_reference=item["source_reference"], practice_type=item["practice_type"],
+                    submitted_date=item["submitted_date"], forwarded_date=item["forwarded_date"],
+                    signed_date=item["signed_date"], campus_days=int(item["campus_days"]),
+                    waiting_days=int(item["waiting_days"]), visits=int(item["visits"]),
+                    returns=int(item["returns"]), lost=item["lost"] == "1",
+                    evidence=item["evidence"], external_delay_days=int(item["external_delay_days"])
+                ))
+                count += 1
+        db.commit()
+        print(f"Anonymized pilot baseline imported: {count} new observations.")

@@ -1,0 +1,501 @@
+"""Цифра — working role-based document workflow MVP.
+
+Run: uvicorn app.main:app --reload
+This implements *internal electronic approval*, not qualified electronic signatures.
+"""
+import csv
+import os
+import hashlib
+import io
+import math
+import secrets
+import statistics
+from collections import Counter
+from datetime import datetime, timedelta
+from urllib.parse import quote
+
+from fastapi import FastAPI, Request, Depends, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+from sqlalchemy import select, desc, func, or_, and_
+from sqlalchemy.orm import Session
+
+from .database import Base, engine, get_db
+from .settings import settings, ROOT
+from .models import User, Agreement, Attachment, Task, AuditEvent, PartnerInvite, AgreementNote, BaselineObservation, LoginAttempt
+from .security import (ROLE_LABELS, STAFF_ROLES, MANAGE_ROLES, hash_password, verify_password,
+                       current_user, require_user, require_role, can_view_agreement, can_upload_agreement,
+                       csrf_token, require_csrf, validate_password)
+from .services import (STATUS_LABELS, STATUS_STEPS, ACTIONS_LABELS, log_event,
+                       possible_actions,advance_agreement)
+from .storage import save_file, get_file, validate_file, safe_filename
+
+app=FastAPI(title="Цифра — ЭДО практики",docs_url=None,redoc_url=None,openapi_url=None)
+allowed_hosts=[x.strip() for x in settings.ALLOWED_HOSTS.split(",") if x.strip()]
+if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+    allowed_hosts.append(os.environ["RENDER_EXTERNAL_HOSTNAME"])
+app.add_middleware(TrustedHostMiddleware,allowed_hosts=allowed_hosts)
+app.add_middleware(SessionMiddleware,secret_key=settings.SECRET_KEY,https_only=settings.SESSION_HTTPS_ONLY,
+                   same_site="lax", max_age=24*60*60,session_cookie="cifra_session")
+app.mount("/static",StaticFiles(directory=str(ROOT/"static")),name="static")
+templates=Jinja2Templates(directory=str(ROOT/"templates"))
+templates.env.filters["date_ru"]=lambda x: x.strftime("%d.%m.%Y") if x else "—"
+templates.env.filters["datetime_ru"]=lambda x: x.strftime("%d.%m.%Y · %H:%M") if x else "—"
+templates.env.filters["size_kb"]=lambda x:f"{x/1024:.0f} КБ" if x else "0 КБ"
+
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(engine)
+
+@app.middleware("http")
+async def security_headers(request,call_next):
+    response=await call_next(request)
+    response.headers["X-Content-Type-Options"]="nosniff"
+    response.headers["X-Frame-Options"]="DENY"
+    response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=()"
+    if not request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"]="private, no-store"
+    if settings.production:
+        response.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
+    return response
+
+@app.exception_handler(401)
+async def unauthorized_handler(request,exc):
+    return RedirectResponse("/login?next="+quote(request.url.path,safe="/"),status_code=303)
+
+@app.exception_handler(403)
+async def forbidden_handler(request,exc):
+    return templates.TemplateResponse(request,"error.html",{"title":"Недостаточно прав","message":str(exc.detail),"user":None,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,"csrf_token":csrf_token(request),"flash":None},status_code=403)
+
+@app.exception_handler(404)
+async def not_found_handler(request,exc):
+    return templates.TemplateResponse(request,"error.html",{"title":"Страница не найдена","message":"Проверьте адрес или вернитесь к списку документов.","user":None,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,"csrf_token":csrf_token(request),"flash":None},status_code=404)
+
+
+def ctx(request,db,user=None,active="",**kwargs):
+    if user is None: user=current_user(request,db)
+    flash=request.session.pop("flash",None)
+    return {"user":user,"active":active,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,
+            "csrf_token":csrf_token(request),"demo_mode":settings.DEMO_MODE,"flash":flash,
+            "today":datetime.utcnow(),**kwargs}
+
+def render(request,db,template,user=None,active="",**kwargs):
+    return templates.TemplateResponse(request,template,ctx(request,db,user,active,**kwargs))
+
+def notify(request,message,kind="success"):
+    request.session["flash"]={"message":message,"kind":kind}
+
+def go(location="/dashboard"):
+    return RedirectResponse(location,status_code=303)
+
+def as_date(value):
+    try: return datetime.strptime(value,"%Y-%m-%d") if value else None
+    except ValueError: return None
+
+def scoped_agreements(db,user):
+    stmt=select(Agreement)
+    if user.role=="STUDENT":stmt=stmt.where(Agreement.student_id==user.id)
+    elif user.role=="ENTERPRISE":stmt=stmt.where(Agreement.enterprise_user_id==user.id)
+    return stmt
+
+def read_case(db,user,agreement_id):
+    case=db.get(Agreement,agreement_id)
+    if not case: raise HTTPException(404,"Договор не найден")
+    if not can_view_agreement(user,case):raise HTTPException(403,"Нет доступа к этому договору")
+    return case
+
+def list_tasks(db,user):
+    q=select(Task)
+    if user.role in {"STUDENT","ENTERPRISE"}:
+        q=q.where(Task.assigned_to_id==user.id)
+    return db.scalars(q.order_by(Task.due_at,desc(Task.id))).all()
+
+@app.get("/",response_class=HTMLResponse)
+def index(request:Request,db:Session=Depends(get_db)):
+    if current_user(request,db):return go("/dashboard")
+    return render(request,db,"landing.html",active="home")
+
+@app.get("/login",response_class=HTMLResponse)
+def login(request:Request,db:Session=Depends(get_db)):
+    if current_user(request,db):return go("/dashboard")
+    return render(request,db,"login.html",title="Войти в Цифру",next_url=request.query_params.get("next","/dashboard"))
+
+@app.post("/login")
+async def login_post(request:Request,db:Session=Depends(get_db)):
+    form=await request.form();require_csrf(request,form)
+    username=str(form.get("username","")).strip().lower()[:90]
+    password=str(form.get("password",""))
+    realm=str(form.get("realm",""))
+    next_url=str(form.get("next","/dashboard"))
+    if not next_url.startswith("/") or next_url.startswith("//") or "\\" in next_url:next_url="/dashboard"
+    if "?" in next_url:next_url=next_url.split("?",1)[0]
+    ip=request.client.host if request.client else ""
+    cutoff=datetime.utcnow()-timedelta(minutes=15)
+    failed=db.scalar(select(func.count(LoginAttempt.id)).where(LoginAttempt.username==username,
+                   LoginAttempt.at>=cutoff)) or 0
+    if failed>=8:
+        notify(request,"Слишком много неудачных попыток входа. Повторите через 15 минут.","error")
+        return go("/login")
+    user=db.scalar(select(User).where(User.username==username,User.is_active.is_(True)))
+    if not user or not verify_password(user.password_hash,password) or (realm and user.role!=realm):
+        db.add(LoginAttempt(username=username,remote_address=ip));db.commit()
+        notify(request,"Неверный логин, пароль или тип кабинета","error")
+        return go("/login")
+    db.query(LoginAttempt).filter(LoginAttempt.username==username).delete(synchronize_session=False)
+    db.commit()
+    request.session.clear();request.session["uid"]=user.id
+    csrf_token(request)
+    notify(request,f"Добро пожаловать, {user.full_name}!")
+    return go(next_url)
+
+@app.post("/logout")
+async def logout(request:Request):
+    form=await request.form();require_csrf(request,form)
+    request.session.clear()
+    return go("/")
+
+@app.get("/dashboard",response_class=HTMLResponse)
+def dashboard(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    cases=db.scalars(scoped_agreements(db,user).order_by(desc(Agreement.updated_at)).limit(7)).all()
+    total=db.scalar(select(func.count()).select_from(scoped_agreements(db,user).subquery())) or 0
+    done=db.scalar(select(func.count()).select_from(scoped_agreements(db,user).where(Agreement.status=="COMPLETED").subquery())) or 0
+    active=total-done
+    tasks=list_tasks(db,user)
+    open_tasks=[t for t in tasks if t.status!="DONE"]
+    overdue=[t for t in open_tasks if t.due_at and t.due_at<datetime.utcnow()]
+    events=[]
+    if user.role in STAFF_ROLES:
+        events=db.scalars(select(AuditEvent).order_by(desc(AuditEvent.id)).limit(8)).all()
+    elif user.role=="STUDENT":
+        own=[c.id for c in cases]
+        if own:events=db.scalars(select(AuditEvent).where(AuditEvent.entity_type=="agreement",AuditEvent.entity_id.in_(own)).order_by(desc(AuditEvent.id)).limit(7)).all()
+    else:
+        own=[c.id for c in cases]
+        if own:events=db.scalars(select(AuditEvent).where(AuditEvent.entity_type=="agreement",AuditEvent.entity_id.in_(own)).order_by(desc(AuditEvent.id)).limit(7)).all()
+    return render(request,db,"dashboard.html",user,active="dashboard",cases=cases,open_tasks=open_tasks[:5],overdue=len(overdue),total=total,done=done,active_count=active,events=events)
+
+@app.get("/agreements",response_class=HTMLResponse)
+def agreements(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    status=request.query_params.get("status","")
+    q=scoped_agreements(db,user)
+    if status in STATUS_LABELS:q=q.where(Agreement.status==status)
+    search=request.query_params.get("q","").strip()[:120]
+    if search:q=q.where(or_(Agreement.reference.ilike(f"%{search}%"),Agreement.title.ilike(f"%{search}%"),Agreement.company_name.ilike(f"%{search}%")))
+    cases=db.scalars(q.order_by(desc(Agreement.created_at)).limit(200)).all()
+    return render(request,db,"agreements.html",user,active="agreements",cases=cases,filter_status=status,q=search,status_items=STATUS_LABELS.items())
+
+@app.get("/agreements/new",response_class=HTMLResponse)
+def new_agreement(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    if user.role not in {"STUDENT","STAFF","COORDINATOR","OFFICE"}:
+        raise HTTPException(403,"Нельзя создать документ")
+    students=db.scalars(select(User).where(User.role=="STUDENT",User.is_active.is_(True)).order_by(User.full_name)).all() if user.role in STAFF_ROLES else []
+    return render(request,db,"agreement_new.html",user,active="agreements",students=students)
+
+@app.post("/agreements/new")
+async def new_agreement_post(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,{"STUDENT","STAFF","COORDINATOR","OFFICE"})
+    f=await request.form();require_csrf(request,f)
+    title=str(f.get("title","")).strip()[:230]
+    company=str(f.get("company_name","")).strip()[:210]
+    if len(title)<5 or len(company)<2:
+        notify(request,"Укажите название документа и предприятие","error");return go("/agreements/new")
+    practice_type=str(f.get("practice_type","Производственная"))
+    if practice_type not in ["Производственная","Учебная","Преддипломная"]:practice_type="Производственная"
+    student_id=user.id
+    if user.role in STAFF_ROLES:
+        try: student_id=int(f.get("student_id") or 0)
+        except ValueError:student_id=0
+        owner=db.get(User,student_id)
+        if not owner or owner.role!="STUDENT":
+            notify(request,"Выберите студента","error");return go("/agreements/new")
+    order=str(f.get("signing_order","university_first"))
+    if order not in {"university_first","enterprise_first"}:order="university_first"
+    obj=Agreement(reference="TMP-"+secrets.token_hex(6).upper(),title=title,student_id=student_id,company_name=company,
+                  practice_type=practice_type,practice_start=str(f.get("practice_start", ""))[:10],practice_end=str(f.get("practice_end", ""))[:10],
+                  deadline_at=as_date(str(f.get("deadline_at",""))),signing_order=order,
+                  description=str(f.get("description",""))[:3000])
+    db.add(obj);db.flush()
+    obj.reference=f"CF-{datetime.utcnow().year}-{obj.id:05d}"
+    log_event(db,user,"created","agreement",obj.id,"Создан черновик договора практики")
+    db.commit();notify(request,"Черновик создан. Загрузите договор и отправьте его на проверку.")
+    return go(f"/agreements/{obj.id}")
+
+@app.get("/agreements/{agreement_id}",response_class=HTMLResponse)
+def agreement_detail(request:Request,agreement_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db);obj=read_case(db,user,agreement_id)
+    files=db.scalars(select(Attachment).where(Attachment.agreement_id==obj.id).order_by(desc(Attachment.created_at))).all()
+    events=db.scalars(select(AuditEvent).where(AuditEvent.entity_type=="agreement",AuditEvent.entity_id==obj.id).order_by(desc(AuditEvent.created_at),desc(AuditEvent.id))).all()
+    notes=db.scalars(select(AgreementNote).where(AgreementNote.agreement_id==obj.id).order_by(desc(AgreementNote.created_at))).all()
+    tasks=db.scalars(select(Task).where(Task.agreement_id==obj.id).order_by(Task.due_at)).all()
+    if user.role in {"STUDENT","ENTERPRISE"}:tasks=[t for t in tasks if t.assigned_to_id==user.id]
+    for e in events:
+        if not hasattr(e,"actor_name"):
+            e.actor_name=(db.get(User,e.actor_id).full_name if e.actor_id and db.get(User,e.actor_id) else "Система")
+    display_steps=(STATUS_STEPS if obj.signing_order=="university_first" else ["DRAFT","STAFF_REVIEW","COORDINATOR_REVIEW","PARTNER_REVIEW","OFFICE_REVIEW","COMPLETED"])
+    step_index=display_steps.index(obj.status) if obj.status in display_steps else 0
+    return render(request,db,"agreement_detail.html",user,active="agreements",case=obj,files=files,events=events,notes=notes,tasks=tasks,
+                  allowed_actions=possible_actions(user,obj),actions_labels=ACTIONS_LABELS,
+                  allow_upload=can_upload_agreement(user,obj),can_invite=(user.role in STAFF_ROLES and obj.enterprise_user_id is None and obj.status!="COMPLETED"),
+                  step_names=display_steps,step_index=step_index)
+
+@app.post("/agreements/{agreement_id}/transition")
+async def agreement_transition(request:Request,agreement_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db);obj=read_case(db,user,agreement_id)
+    f=await request.form();require_csrf(request,f)
+    action=str(f.get("action",""))
+    advance_agreement(db,user,obj,action)
+    db.commit();notify(request,"Статус согласования обновлён; событие записано в историю.")
+    return go(f"/agreements/{obj.id}")
+
+@app.post("/agreements/{agreement_id}/upload")
+async def agreement_upload(request:Request,agreement_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db);obj=read_case(db,user,agreement_id)
+    if not can_upload_agreement(user,obj):raise HTTPException(403,"Загрузка недоступна на этом этапе")
+    f=await request.form();require_csrf(request,f)
+    upload=f.get("file")
+    if not isinstance(upload,UploadFile):
+        # starlette UploadFile class may differ in FastAPI runtime
+        if not hasattr(upload,"read"):
+            notify(request,"Выберите файл","error");return go(f"/agreements/{agreement_id}")
+    data=await upload.read(settings.MAX_UPLOAD_MB*1024*1024+1)
+    try:ext,mime=validate_file(upload.filename or "",data)
+    except ValueError as e:
+        notify(request,str(e),"error");return go(f"/agreements/{agreement_id}")
+    key=save_file(obj.id,upload.filename,data,mime)
+    version=(db.scalar(select(func.max(Attachment.version_no)).where(Attachment.agreement_id==obj.id)) or 0)+1
+    attachment=Attachment(agreement_id=obj.id,uploaded_by_id=user.id,filename=safe_filename(upload.filename or "документ"),
+                          object_key=key,mime_type=mime,size_bytes=len(data),sha256=hashlib.sha256(data).hexdigest(),version_no=version)
+    db.add(attachment)
+    log_event(db,user,"file_uploaded","agreement",obj.id,f"Версия {version}: {attachment.filename} · SHA-256 {attachment.sha256[:16]}…")
+    db.commit();notify(request,"Файл загружен в защищённое хранилище; версия и контрольная сумма сохранены.")
+    return go(f"/agreements/{agreement_id}")
+
+@app.get("/files/{attachment_id}/download")
+def download_file(request:Request,attachment_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    f=db.get(Attachment,attachment_id)
+    if not f:raise HTTPException(404,"Файл не найден")
+    read_case(db,user,f.agreement_id)
+    raw=get_file(f.object_key)
+    safe=f.filename.replace('"','_').replace("\r","").replace("\n","")
+    from urllib.parse import quote as uquote
+    return Response(raw,media_type="application/octet-stream",headers={"Content-Disposition":f"attachment; filename*=UTF-8''{uquote(safe)}","X-Content-Type-Options":"nosniff","Cache-Control":"private, no-store"})
+
+@app.post("/agreements/{agreement_id}/note")
+async def new_note(request:Request,agreement_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db);obj=read_case(db,user,agreement_id)
+    f=await request.form();require_csrf(request,f)
+    message=str(f.get("message","")).strip()[:2000]
+    if message:
+        db.add(AgreementNote(agreement_id=obj.id,author_id=user.id,text=message))
+        log_event(db,user,"note_added","agreement",obj.id,"Добавлен комментарий к договору")
+        db.commit();notify(request,"Комментарий добавлен")
+    return go(f"/agreements/{agreement_id}#discussion")
+
+@app.get("/tasks",response_class=HTMLResponse)
+def tasks(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    all_tasks=list_tasks(db,user)
+    users=db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.full_name)).all() if user.role in STAFF_ROLES else []
+    cases=db.scalars(scoped_agreements(db,user).order_by(desc(Agreement.id)).limit(120)).all() if user.role in STAFF_ROLES else []
+    return render(request,db,"tasks.html",user,active="tasks",tasks=all_tasks,users=users,cases=cases,can_create=user.role in STAFF_ROLES)
+
+@app.post("/tasks/new")
+async def task_create(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,STAFF_ROLES)
+    f=await request.form();require_csrf(request,f)
+    title=str(f.get("title","")).strip()[:230]
+    if len(title)<4:notify(request,"Укажите задачу","error");return go("/tasks")
+    try:recipient_id=int(f.get("assigned_to_id") or 0)
+    except ValueError:recipient_id=0
+    recipient=db.get(User,recipient_id)
+    if not recipient or not recipient.is_active:
+        notify(request,"Выберите исполнителя","error");return go("/tasks")
+    case_id=None
+    try:case_id=int(f.get("agreement_id") or 0) or None
+    except ValueError:pass
+    if recipient.role=="ENTERPRISE":
+        case=db.get(Agreement,case_id) if case_id else None
+        if not case or case.enterprise_user_id!=recipient.id:
+            notify(request,"Предприятию можно назначать задачи только по его договору","error");return go("/tasks")
+    pr=str(f.get("priority","normal"))
+    if pr not in {"low","normal","high"}:pr="normal"
+    d=as_date(str(f.get("due_at","")))
+    t=Task(title=title,details=str(f.get("details",""))[:3000],created_by_id=user.id,assigned_to_id=recipient.id,
+           agreement_id=case_id,due_at=d,priority=pr)
+    db.add(t);db.flush();log_event(db,user,"task_created","task",t.id,f"Назначено: {recipient.username}; срок {d.date().isoformat() if d else 'без срока'}")
+    db.commit();notify(request,"Задача создана и назначена")
+    return go("/tasks")
+
+@app.post("/tasks/{task_id}/state")
+async def task_state(request:Request,task_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db);t=db.get(Task,task_id)
+    if not t:raise HTTPException(404,"Задача не найдена")
+    if user.id!=t.assigned_to_id and user.role not in STAFF_ROLES: raise HTTPException(403,"Нет доступа")
+    f=await request.form();require_csrf(request,f)
+    state=str(f.get("state",""))
+    if state not in {"TODO","IN_PROGRESS","DONE"}:raise HTTPException(422,"Недопустимый статус")
+    old=t.status;t.status=state
+    log_event(db,user,"task_updated","task",t.id,f"{old} → {state}")
+    db.commit();notify(request,"Статус задачи обновлён")
+    return go("/tasks")
+
+@app.get("/activity",response_class=HTMLResponse)
+def activity(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,STAFF_ROLES)
+    events=db.scalars(select(AuditEvent).order_by(desc(AuditEvent.id)).limit(250)).all()
+    for e in events: e.actor_name=(db.get(User,e.actor_id).full_name if e.actor_id and db.get(User,e.actor_id) else "Система")
+    return render(request,db,"activity.html",user,active="activity",events=events)
+
+@app.get("/analytics",response_class=HTMLResponse)
+def analytics(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,STAFF_ROLES)
+    observations=db.scalars(select(BaselineObservation)).all()
+    total=len(observations)
+    caldays=[x.campus_days for x in observations]
+    evidence=Counter(o.evidence for o in observations)
+    lost=sum(bool(x.lost) for x in observations)
+    visits=sum(x.visits for x in observations)
+    returns=sum(x.returns for x in observations)
+    bucket_labels=["до 7","8–14","15–21","22–28","29+"]
+    buckets=[0]*5
+    for v in caldays:buckets[0 if v<=7 else 1 if v<=14 else 2 if v<=21 else 3 if v<=28 else 4]+=1
+    completed=db.scalars(select(Agreement).where(Agreement.completed_at.is_not(None),Agreement.submitted_at.is_not(None),Agreement.is_demo.is_(False))).all()
+    after_days=[(x.completed_at-x.submitted_at).total_seconds()/86400 for x in completed]
+    live_total=db.scalar(select(func.count(Agreement.id)).where(Agreement.is_demo.is_(False))) or 0
+    open_tasks=db.scalar(select(func.count(Task.id)).where(Task.status!="DONE")) or 0
+    return render(request,db,"analytics.html",user,active="analytics",count=total,mean=statistics.mean(caldays) if caldays else 0,
+                  median=statistics.median(caldays) if caldays else 0,confirmed=evidence.get("Документально подтверждено",0),
+                  estimated=evidence.get("Экспертная оценка",0),lost=lost,visits=visits,returns=returns,
+                  bucket_labels=bucket_labels,buckets=buckets,max_bucket=max(buckets) if buckets else 1,
+                  after_count=len(after_days),after_mean=statistics.mean(after_days) if after_days else None,
+                  live_total=live_total,open_tasks=open_tasks)
+
+@app.get("/analytics/export")
+def analytics_export(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,STAFF_ROLES)
+    items=db.scalars(select(BaselineObservation).order_by(BaselineObservation.source_reference)).all()
+    out=io.StringIO();w=csv.writer(out,delimiter=";")
+    w.writerow(["ID","Вид практики","Сдан","Передан","Выдан","Дни вуза","Ожидание","Визиты","Возвраты","Утерян","Тип источника"])
+    for x in items:w.writerow([x.source_reference,x.practice_type,x.submitted_date,x.forwarded_date,x.signed_date,x.campus_days,x.waiting_days,x.visits,x.returns,int(x.lost),x.evidence])
+    raw="\ufeff"+out.getvalue()
+    return Response(raw,media_type="text/csv; charset=utf-8",headers={"Content-Disposition":"attachment; filename=cifra_baseline_anonymized.csv"})
+
+@app.get("/team",response_class=HTMLResponse)
+def team(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,{"MANAGER","OFFICE","COORDINATOR"})
+    users=db.scalars(select(User).order_by(User.role,User.full_name)).all()
+    return render(request,db,"team.html",user,active="team",users=users)
+
+@app.post("/team/new")
+async def new_user(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,{"MANAGER"})
+    f=await request.form();require_csrf(request,f)
+    username=str(f.get("username","")).strip().lower()[:90]
+    full_name=str(f.get("full_name","")).strip()[:180]
+    pwd=str(f.get("password", ""))
+    role=str(f.get("role",""))
+    if role not in ROLE_LABELS or role=="ENTERPRISE" or len(username)<4 or len(full_name)<3 or not validate_password(pwd):
+        notify(request,"Проверьте роль, имя, логин и пароль (от 12 символов, цифра, верхний и нижний регистр)","error");return go("/team")
+    if db.scalar(select(User.id).where(User.username==username)):
+        notify(request,"Логин уже используется","error");return go("/team")
+    newcomer=User(username=username,full_name=full_name,password_hash=hash_password(pwd),role=role)
+    db.add(newcomer);db.flush();log_event(db,user,"user_created","user",newcomer.id,f"Роль: {role}")
+    db.commit();notify(request,"Учётная запись создана")
+    return go("/team")
+
+@app.get("/partners",response_class=HTMLResponse)
+def partners(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,STAFF_ROLES)
+    cases=db.scalars(select(Agreement).where(Agreement.status!="COMPLETED").order_by(desc(Agreement.id))).all()
+    invites=db.scalars(select(PartnerInvite).order_by(desc(PartnerInvite.id)).limit(30)).all()
+    return render(request,db,"partners.html",user,active="partners",cases=cases,invites=invites)
+
+@app.post("/partners/invite")
+async def create_partner_invite(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db);require_role(user,STAFF_ROLES)
+    f=await request.form();require_csrf(request,f)
+    try:case_id=int(f.get("agreement_id") or 0)
+    except ValueError:case_id=0
+    case=db.get(Agreement,case_id)
+    if not case or case.status=="COMPLETED" or case.enterprise_user_id:
+        notify(request,"Выберите активный договор без назначенного партнёра","error");return go("/partners")
+    token=secrets.token_urlsafe(28)
+    org=str(f.get("organization_name",case.company_name)).strip()[:210] or case.company_name
+    invite=PartnerInvite(agreement_id=case.id,organization_name=org,token_sha256=hashlib.sha256(token.encode()).hexdigest(),
+                          created_by_id=user.id,expires_at=datetime.utcnow()+timedelta(hours=48))
+    db.add(invite);db.flush();log_event(db,user,"partner_invite_created","agreement",case.id,f"Приглашение №{invite.id}, действует 48 часов")
+    db.commit()
+    request.session["new_invite_url"]=settings.BASE_URL.rstrip("/")+f"/activate/{token}"
+    notify(request,"Одноразовая ссылка создана. Передайте её партнёру по защищённому каналу.")
+    return go("/partners")
+
+@app.get("/activate/{token}",response_class=HTMLResponse)
+def activate(request:Request,token:str,db:Session=Depends(get_db)):
+    digest=hashlib.sha256(token.encode()).hexdigest()
+    invite=db.scalar(select(PartnerInvite).where(PartnerInvite.token_sha256==digest))
+    if not invite or invite.redeemed_at or invite.expires_at<datetime.utcnow():
+        return render(request,db,"activation.html",title="Приглашение недействительно",valid=False)
+    return render(request,db,"activation.html",title="Подключение предприятия",valid=True,company=invite.organization_name,token=token)
+
+@app.post("/activate/{token}")
+async def activate_post(request:Request,token:str,db:Session=Depends(get_db)):
+    f=await request.form();require_csrf(request,f)
+    digest=hashlib.sha256(token.encode()).hexdigest()
+    invite=db.scalar(select(PartnerInvite).where(PartnerInvite.token_sha256==digest))
+    if not invite or invite.redeemed_at or invite.expires_at<datetime.utcnow():raise HTTPException(403,"Приглашение недоступно")
+    username=str(f.get("username","")).strip().lower()[:90]
+    full_name=str(f.get("full_name","")).strip()[:180]
+    pwd=str(f.get("password",""))
+    if len(username)<4 or len(full_name)<3 or not validate_password(pwd):
+        notify(request,"Заполните имя и придумайте надёжный пароль (12 символов, регистры и цифра)","error")
+        return go(f"/activate/{token}")
+    if db.scalar(select(User.id).where(User.username==username)):
+        notify(request,"Логин занят","error");return go(f"/activate/{token}")
+    obj=db.get(Agreement,invite.agreement_id)
+    if not obj or obj.enterprise_user_id:
+        raise HTTPException(403,"Договор уже закреплён за другим пользователем")
+    u=User(username=username,full_name=full_name,role="ENTERPRISE",password_hash=hash_password(pwd),organization_name=invite.organization_name)
+    db.add(u);db.flush();obj.enterprise_user_id=u.id;invite.redeemed_at=datetime.utcnow()
+    log_event(db,u,"partner_activated","agreement",obj.id,f"Создан ограниченный доступ предприятия {invite.organization_name}")
+    db.commit();notify(request,"Кабинет предприятия активирован. Войдите с созданными реквизитами.")
+    return go("/login")
+
+@app.get("/modules",response_class=HTMLResponse)
+def modules(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    return render(request,db,"modules.html",user,active="modules")
+
+@app.get("/guide",response_class=HTMLResponse)
+def guide(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    return render(request,db,"guide.html",user,active="guide")
+
+@app.get("/profile",response_class=HTMLResponse)
+def profile(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    return render(request,db,"profile.html",user,active="profile")
+
+@app.post("/profile/password")
+async def password_change(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    f=await request.form();require_csrf(request,f)
+    old=str(f.get("old_password","")); new=str(f.get("new_password",""))
+    if not verify_password(user.password_hash,old) or not validate_password(new):
+        notify(request,"Проверьте текущий и новый пароль. Новый пароль: минимум 12 символов, верхний/нижний регистр и цифра.","error")
+        return go("/profile")
+    user.password_hash=hash_password(new)
+    log_event(db,user,"password_changed","user",user.id,"Пароль учётной записи изменён")
+    db.commit();request.session.clear()
+    notify(request,"Пароль обновлён, войдите снова")
+    return go("/login")
+
+@app.get("/health")
+def health():return {"status":"ok","service":"cifra"}

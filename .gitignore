@@ -1,0 +1,11 @@
+.env
+*.sqlite3
+*.db
+__pycache__/
+.pytest_cache/
+*.py[cod]
+private_uploads/
+demo_credentials.txt
+.venv/
+.env.*
+!/.env.example
