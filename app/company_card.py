@@ -1,6 +1,7 @@
 """Company questionnaire and downloadable editable draft agreement (not a signature)."""
 import io
 import re
+import secrets
 from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -62,7 +63,7 @@ async def submit(request:Request,db:Session=Depends(get_db)):
     practice=safe(f.get("practice_type"),70)
     if practice not in ("Производственная","Учебная","Преддипломная"):
         raise HTTPException(422,"Неверный вид практики")
-    case=Agreement(reference="PENDING",
+    case=Agreement(reference="TEMP-"+secrets.token_hex(12),
         title="Договор о практической подготовке — "+data["company_full_name"][:140],
         student_id=user.id,company_name=data["company_full_name"][:210],
         practice_type=practice,practice_start=start,practice_end=end,
