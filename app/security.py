@@ -13,7 +13,7 @@ ROLE_LABELS={
  "COORDINATOR":"Ответственный за практику",
  "OFFICE":"Отдел практик и стажировок",
  "ENTERPRISE":"Предприятие",
- "MANAGER":"Руководство",
+ "MANAGER":"Ответственный по практике",
 }
 STAFF_ROLES={"STAFF","COORDINATOR","OFFICE","MANAGER"}
 MANAGE_ROLES={"COORDINATOR","OFFICE","MANAGER"}
