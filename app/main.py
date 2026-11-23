@@ -264,7 +264,7 @@ def agreement_detail(request:Request,agreement_id:int,db:Session=Depends(get_db)
     can_ukep=(obj.status=="SIGNING_PENDING" and ((user.role=="OFFICE") or (user.role=="ENTERPRISE" and obj.enterprise_user_id==user.id)) and not any(x.signer_side==("UNIVERSITY" if user.role=="OFFICE" else "ENTERPRISE") for x in signatures))
     return render(request,db,"agreement_detail.html",user,active="agreements",case=obj,files=files,events=events,notes=notes,tasks=tasks,preview_url=preview_url,has_card=has_card,signatures=signatures,can_ukep=can_ukep,ukep_configured=bool(settings.UKEP_VERIFY_URL and settings.UKEP_VERIFY_TOKEN),
                   allowed_actions=possible_actions(user,obj),actions_labels=ACTIONS_LABELS,
-                  allow_upload=can_upload_agreement(user,obj),can_invite=(user.role in STAFF_ROLES and obj.enterprise_user_id is None and obj.status!="COMPLETED"),
+                  allow_upload=(obj.status not in {"SIGNING_PENDING","COMPLETED"} and not signatures and can_upload_agreement(user,obj)),can_invite=(user.role in STAFF_ROLES and obj.enterprise_user_id is None and obj.status!="COMPLETED"),
                   step_names=display_steps,step_index=step_index)
 
 @app.post("/agreements/{agreement_id}/transition")
@@ -282,6 +282,8 @@ async def agreement_transition(request:Request,agreement_id:int,db:Session=Depen
 @app.post("/agreements/{agreement_id}/upload")
 async def agreement_upload(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     user=require_user(request,db);obj=read_case(db,user,agreement_id)
+    if obj.status in {"SIGNING_PENDING","COMPLETED"} or db.scalar(select(QualifiedSignature.id).where(QualifiedSignature.agreement_id==obj.id).limit(1)):
+        raise HTTPException(409,"После передачи на УКЭП изменение документа запрещено")
     if not can_upload_agreement(user,obj):raise HTTPException(403,"Загрузка недоступна на этом этапе")
     f=await request.form();require_csrf(request,f)
     upload=f.get("file")
