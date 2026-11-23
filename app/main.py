@@ -66,6 +66,13 @@ def seed_demo_tasks():
     with SessionLocal() as db:
         users=db.scalars(select(User).where(User.is_active.is_(True))).all()
         demo_cases=db.scalars(select(Agreement).where(Agreement.is_demo.is_(True)).order_by(Agreement.id).limit(12)).all()
+        # Three clearly labeled, completed TRAINING scenarios. No cryptographic
+        # signature records are created; a valid УКЭП requires real signing.
+        completed_demo_cases=demo_cases[:3]
+        for demo_case in completed_demo_cases:
+            if demo_case.status!="COMPLETED":
+                demo_case.status="COMPLETED"
+
         for user in users:
             is_demo=str(user.username or "").lower().startswith(("demo","test"))
             is_practice_office=(user.role=="OFFICE" or "отдел практик" in str(user.full_name or "").lower())
