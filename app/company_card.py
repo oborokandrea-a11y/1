@@ -354,11 +354,6 @@ def build_docx(case,card):
     if case.is_demo:
         from docx.shared import RGBColor
         demo_date=values["contract_date"]
-        if demo_completed:
-            heading=doc.add_paragraph("Демонстрационный блок подписания")
-            for run in heading.runs:run.bold=True
-            doc.add_paragraph("Вымышленный представитель предприятия: "+demo_director)
-            doc.add_paragraph("Согласование завершено только в тестовом сценарии. Реальных УКЭП и печатей нет.")
         notice=doc.add_paragraph("ТЕСТОВЫЙ ЭКЗЕМПЛЯР. НЕ ИМЕЕТ ЮРИДИЧЕСКОЙ СИЛЫ. ДАННЫЕ ДЕМОНСТРАЦИОННЫЕ.")
         notice.style=doc.styles["Normal"]
         for run in notice.runs:
