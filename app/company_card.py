@@ -218,7 +218,7 @@ def build_demo_docx(case,card):
     doc=Document()
     section=doc.sections[0]
     section.header.paragraphs[0].text="ЦИФРА ЭДО · ТЕСТОВЫЙ РЕЖИМ"
-    doc.add_heading("Демонстрационная карточка договора",0)
+    doc.add_heading(f"Договор № {case.id} (демонстрационный)",0)
     doc.add_paragraph("ТЕСТОВЫЙ ДОКУМЕНТ. НЕ ЯВЛЯЕТСЯ ДОГОВОРОМ И НЕ ПОДЛЕЖИТ ПОДПИСАНИЮ.")
     for label,value in [
         ("Студент",card.student_name),
@@ -268,7 +268,7 @@ def build_docx(case,card):
     demo_director=("Смирнов Алексей Викторович" if (card.student_name or "").startswith("Орлов") else "Беляев Дмитрий Павлович") if demo_completed else None
     director_for_document=demo_director or card.director_name
     values={
-        "contract_number":case.reference,
+        "contract_number":(str(case.id) if case.is_demo else case.reference),
         "contract_date":((datetime(2026,1,1)+timedelta(days=int(case.id or 0))).strftime("%d.%m.%Y") if case.is_demo else (case.created_at.strftime("%d.%m.%Y") if case.created_at else datetime.utcnow().strftime("%d.%m.%Y"))),
         "company_full_name":card.company_full_name,
         "company_short_name":card.company_short_name or "________________",
@@ -331,6 +331,15 @@ def build_docx(case,card):
                     for idx in range(first+1,last):runs[idx].text=""
                     runs[last].text=after
     for paragraph in doc.paragraphs:replace_runs(paragraph)
+    # Some uploaded templates incorrectly put the student's initials in the
+    # agreement-number field instead of using {{contract_number}}.
+    # Correct only demo documents, retaining the approved real template.
+    if case.is_demo:
+        for paragraph in doc.paragraphs:
+            if re.search(r"Договор\\s*№\\s*[А-ЯЁ][а-яё]+\\s+[А-ЯЁ]\\.[А-ЯЁ]\\.",paragraph.text,re.I):
+                for run in paragraph.runs:
+                    run.text=re.sub(r"(Договор\\s*№\\s*)[А-ЯЁ][а-яё]+\\s+[А-ЯЁ]\\.[А-ЯЁ]\\.",r"\\g<1>"+str(case.id),run.text,flags=re.I)
+
     # XML cell wrappers can be recreated for each access; id(cell._tc)
     # may be reused and incorrectly skip other cells. Deduplicate by
     # the underlying XML element, not its temporary Python object id.
