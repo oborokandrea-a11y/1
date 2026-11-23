@@ -9,7 +9,124 @@ from app.security import hash_password
 SURNAMES=["Орлов","Соколов","Миронов","Волков","Белов","Лебедев","Крылов","Фролов","Козлов","Зайцев","Морозов","Егоров","Громов","Тихонов","Баранов","Павлов","Борисов","Никитин","Макаров","Семёнов","Романов","Фёдоров","Алексеев","Ильин","Кузнецов","Данилов","Богданов","Савельев","Васильев"]
 NAMES=["Артём","Илья","Максим","Даниил","Кирилл","Никита","Александр","Егор","Михаил","Павел"]
 PATRONYMICS=["Андреевич","Сергеевич","Игоревич","Павлович","Олегович","Викторович"]
-SECTORS=["Аналитика","Технологии","Проект","Инжиниринг","Данные","Логистика","Консалтинг","Инновации","Системы","Решения"]
+COMPANIES = [
+  [
+    "АО \"Гринатом\"",
+    "г. Москва"
+  ],
+  [
+    "ООО \"ТОРГОВЫЙ ДОМ \"ТУЛА-СТАЛЬ\"",
+    "г. Москва"
+  ],
+  [
+    "ООО «Технологии безопасности»",
+    "г. Москва"
+  ],
+  [
+    "АО \"Выксунский металлургический завод\"",
+    "г. Выкса"
+  ],
+  [
+    "ООО «ЗН Восток»",
+    "Москва"
+  ],
+  [
+    "Министерство финансов Российской Федерации",
+    "Москва"
+  ],
+  [
+    "АО \"Кэпт\"",
+    "Москва"
+  ],
+  [
+    "ООО «КДВ Краснодар»",
+    "Краснодарский край, с. Белая Глина"
+  ],
+  [
+    "АО «Деловые Решения и Технологии»",
+    "Москва"
+  ],
+  [
+    "ОБУЗ «Стоматологическая поликлиника №1»",
+    "Иваново"
+  ],
+  [
+    "Постоянное представительство Республики Карелия при Президенте РФ",
+    "Москва"
+  ],
+  [
+    "ООО «МАХТ»",
+    "Москва"
+  ],
+  [
+    "ООО \"Бусиново\"",
+    "Москва"
+  ],
+  [
+    "ООО «НеоНет»",
+    "Москва"
+  ],
+  [
+    "ООО «ПАР ГРУПП»",
+    "Москва"
+  ],
+  [
+    "ООО «Оружейные Мастерские»",
+    "Владимирская область, Камешково"
+  ],
+  [
+    "ООО \"Аудиторское бюро\"",
+    "Москва"
+  ],
+  [
+    "ООО «Корсо Милано»",
+    "Москва"
+  ],
+  [
+    "ГБУ \"АВТОМОБИЛЬНЫЕ ДОРОГИ ЦАО\"",
+    "Москва"
+  ],
+  [
+    "Ивановский государственный университет",
+    "Иваново"
+  ],
+  [
+    "ООО «СибЛайнер»",
+    "Домодедово"
+  ],
+  [
+    "ООО \"Б1 - Аудит\"",
+    "Москва"
+  ],
+  [
+    "ООО \"Тандем\"",
+    "Москва"
+  ],
+  [
+    "ООО «РЕСТОРАННА»",
+    "Ульяновск"
+  ],
+  [
+    "ООО \"Атлант-Стройресурс40\"",
+    "Верея"
+  ],
+  [
+    "ООО \"ПЕРСПЕКТИВА\"",
+    "Москва"
+  ],
+  [
+    "ООО «ФАСАД СТРОЙ»",
+    "Москва"
+  ],
+  [
+    "АО \"СО ЕЭС\"",
+    "Москва"
+  ],
+  [
+    "ООО «ЮМани»",
+    "Москва"
+  ]
+]
 with SessionLocal() as db:
     student_demo=db.scalar(select(User).where(User.username=="student-demo"))
     enterprise_demo=db.scalar(select(User).where(User.username=="enterprise-demo"))
@@ -23,8 +140,7 @@ with SessionLocal() as db:
             created=0
             for i in range(1,30):
                 reference=f"TEST-CIFRA-2026-{i:03d}"
-                if db.scalar(select(Agreement.id).where(Agreement.reference==reference)):
-                    continue
+                existing=db.scalar(select(Agreement).where(Agreement.reference==reference))
                 student_name=f"{SURNAMES[i-1]} {NAMES[(i-1)%len(NAMES)]} {PATRONYMICS[(i-1)%len(PATRONYMICS)]}"
                 login=f"cifra-test-student-{i:02d}"
                 student=db.scalar(select(User).where(User.username==login))
@@ -32,19 +148,29 @@ with SessionLocal() as db:
                     student=User(username=login,full_name=student_name,role="STUDENT",
                         password_hash=hash_password(password),organization_name="")
                     db.add(student);db.flush()
-                company=f'ООО «{SECTORS[(i-1)%len(SECTORS)]} {i:02d}»'
+                company,address=COMPANIES[i-1]
+                if existing:
+                    existing.company_name=company
+                    existing.description='ТЕСТОВАЯ ЗАПИСЬ: вымышленный студент, организация из реестра практики 2026. Договор не подписан.'
+                    card=db.scalar(select(CompanyCard).where(CompanyCard.agreement_id==existing.id))
+                    if card:
+                        card.company_full_name=company
+                        card.company_short_name=company
+                        card.company_address=address
+                        card.company_actual_address=address
+                    continue
                 agreement=Agreement(reference=reference,title=f"Практическая подготовка — {student_name}",
                     practice_type="Производственная",student_id=student.id,company_name=company,
                     enterprise_user_id=enterprise_demo.id,practice_start="2026-07-01",
                     practice_end="2026-07-28",status="DRAFT",is_demo=True,
-                    description="ТЕСТОВАЯ ЗАПИСЬ. Вымышленные студент и предприятие; не является заключённым договором.")
+                    description="ТЕСТОВАЯ ЗАПИСЬ. Вымышленный студент; организация из реестра практики 2026. Не является заключённым договором.")
                 db.add(agreement);db.flush()
                 db.add(CompanyCard(agreement_id=agreement.id,student_name=student_name,
                     group_name=f"ТЕСТ-26-{(i-1)//10+1}",course_name="3",
                     department="Учебное подразделение",program="Экономика и управление",
                     company_full_name=company,company_short_name=company,
-                    company_address="Тестовый адрес (не является юридическим адресом)",
-                    company_actual_address="Тестовый адрес (не является юридическим адресом)",
+                    company_address=address,
+                    company_actual_address=address,
                     company_inn="",company_kpp="",company_ogrn="",
                     director_position="Руководитель",director_name="Не указано",
                     director_basis="Не указано",contact_name="Не указано",
@@ -54,4 +180,4 @@ with SessionLocal() as db:
                     details="Создана демонстрационная карточка с вымышленными данными. Подписей нет."))
                 created+=1
             db.commit()
-            print(f"TEST29: created {created} new fictional company cards")
+            print(f"TEST29: synchronized 29 test cards with organizations from source Excel; newly created {created}")
