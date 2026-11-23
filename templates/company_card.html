@@ -5,28 +5,35 @@
 <form action="/company-card/new" method="post" class="form-stack">
 <input type="hidden" name="csrf_token" value="{{csrf_token}}">
 <h2>01. Сведения о студенте</h2>
-<div class="form-two"><label>Ф.И.О. студента *<input name="student_name" value="{{user.full_name}}" required maxlength="180"></label><label>Группа *<input name="group_name" required placeholder="БЭК-24-..." maxlength="90"></label></div>
+<div class="form-two"><label>Ф.И.О. студента *<input name="student_name" value="" placeholder="Фамилия Имя Отчество" required maxlength="180"></label><label>Группа *<input name="group_name" required placeholder="БЭК-24-..." maxlength="90"></label></div>
 <div class="form-two"><label>Курс<input name="course_name" placeholder="3" maxlength="50"></label><label>Кафедра *<input name="department" required maxlength="180"></label></div>
 <label>Образовательная программа *<input name="program" required maxlength="200"></label>
 <div class="form-two"><label>Вид практики<select name="practice_type"><option>Производственная</option><option>Учебная</option><option>Преддипломная</option></select></label><label>Практика оплачивается?<select name="practice_paid"><option value="no">Нет</option><option value="yes">Да</option></select></label></div>
 <div class="form-two"><label>Начало практики *<input type="date" name="practice_start" required></label><label>Окончание практики *<input type="date" name="practice_end" required></label></div>
 <h2>02. Реквизиты организации</h2>
 <label>Полное юридическое наименование *<input name="company_full_name" required maxlength="250" placeholder="Общество с ограниченной ответственностью «...»"></label>
+<div class="form-two"><label>Сокращённое наименование<input name="company_short_name" maxlength="250"></label><label>Резидентство<select name="residency"><option>Резидент</option><option>Нерезидент</option></select></label></div>
+<label>Страна регистрации (для нерезидента)<input name="registration_country" maxlength="120"></label>
 <label>Юридический адрес *<input name="company_address" required maxlength="450"></label>
+<label>Фактический адрес<input name="company_actual_address" maxlength="450"></label>
+<div class="form-two"><label>Телефон предприятия<input name="company_phone" type="tel"></label><label>Факс<input name="company_fax"></label></div>
 <div class="form-two"><label>ИНН (10 или 12 цифр) *<input name="company_inn" required pattern="[0-9]{10}|[0-9]{12}" maxlength="12"></label><label>КПП<input name="company_kpp" maxlength="15"></label></div>
 <div class="form-two"><label>ОГРН / ОГРНИП<input name="company_ogrn" maxlength="20"></label><label>ОКПО<input name="company_okpo" maxlength="20"></label></div>
 <label>ОКВЭД<input name="company_okved" maxlength="30"></label>
-<h2>03. Руководитель и контактное лицо</h2>
+<h2>03. Банковские реквизиты</h2>
+<div class="form-two"><label>Расчётный счёт<input name="bank_account" inputmode="numeric" maxlength="40"></label><label>Наименование банка<input name="bank_name" maxlength="250"></label></div>
+<div class="form-two"><label>Корреспондентский счёт<input name="correspondent_account" inputmode="numeric" maxlength="40"></label><label>БИК<input name="bank_bik" inputmode="numeric" maxlength="20"></label></div>
+<h2>04. Руководитель и контактное лицо</h2>
 <div class="form-two"><label>Должность подписанта *<input name="director_position" required placeholder="Генерального директора"></label><label>Ф.И.О. подписанта *<input name="director_name" required></label></div>
 <label>Действует на основании *<input name="director_basis" required placeholder="Устава / доверенности №..."></label>
 <div class="form-two"><label>Контактное лицо *<input name="contact_name" required></label><label>Телефон *<input name="contact_phone" required type="tel"></label></div>
 <label>Электронная почта<input name="contact_email" type="email"></label>
-<h2>04. Место проведения практики</h2>
+<h2>05. Место проведения практики</h2>
 <div class="form-two"><label>Подразделение<input name="room_department" placeholder="Отдел / лаборатория"></label><label>Адрес и помещение *<input name="room_address" required placeholder="Адрес, корпус, кабинет"></label></div>
-<h2>05. Контакт университета (при наличии)</h2>
+<h2>06. Контакт университета (при наличии)</h2>
 <div class="form-two"><label>Ф.И.О. ответственного<input name="university_contact"></label><label>Телефон<input name="university_phone"></label></div>
 <label>Электронная почта<input name="university_email" type="email"></label>
-<div class="note-soft">Сформированный файл — проект для проверки сотрудником университета. Номер договора и полномочия подписанта университета должны быть подтверждены перед подписанием. Не вводите вымышленные сведения в реальные договоры.</div>
+<div class="note-soft">Сформированный файл — проект для проверки сотрудником университета. Внутренний последовательный номер присваивается автоматически. Официальный номер и полномочия подписанта университета подтверждаются перед подписанием. Не вводите вымышленные сведения в реальные договоры.</div>
 <div class="form-actions"><a href="/dashboard" class="btn btn-secondary">Отмена</a><button class="btn btn-primary" type="submit">Сохранить и сформировать проект договора</button></div>
 </form></section>
 {% endblock %}
