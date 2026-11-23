@@ -127,6 +127,7 @@ COMPANIES = [
     "Москва"
   ]
 ]
+STAGES=["DRAFT","STAFF_REVIEW","COORDINATOR_REVIEW","OFFICE_REVIEW","PARTNER_REVIEW","REVISION_REQUIRED","SIGNING_PENDING"]
 with SessionLocal() as db:
     student_demo=db.scalar(select(User).where(User.username=="student-demo"))
     enterprise_demo=db.scalar(select(User).where(User.username=="enterprise-demo"))
@@ -151,9 +152,10 @@ with SessionLocal() as db:
                     db.add(student);db.flush()
                 company,address=COMPANIES[i-1]
                 if existing:
+                    existing.status=STAGES[(i-1)%len(STAGES)]
                     existing.reference=reference
                     existing.company_name=company
-                    existing.description='ТЕСТОВАЯ ЗАПИСЬ: вымышленный студент, организация из реестра практики 2026. Договор не подписан.'
+                    existing.description='ТЕСТОВАЯ ЗАПИСЬ: вымышленный студент, организация из реестра практики 2026. Статус этапа смоделирован для проверки интерфейса; реального согласования и подписей нет.'
                     card=db.scalar(select(CompanyCard).where(CompanyCard.agreement_id==existing.id))
                     if card:
                         card.company_full_name=company
@@ -164,8 +166,8 @@ with SessionLocal() as db:
                 agreement=Agreement(reference=reference,title=f"Практическая подготовка — {student_name}",
                     practice_type="Производственная",student_id=student.id,company_name=company,
                     enterprise_user_id=enterprise_demo.id,practice_start="2026-07-01",
-                    practice_end="2026-07-28",status="DRAFT",is_demo=True,
-                    description="ТЕСТОВАЯ ЗАПИСЬ. Вымышленный студент; организация из реестра практики 2026. Не является заключённым договором.")
+                    practice_end="2026-07-28",status=STAGES[(i-1)%len(STAGES)],is_demo=True,
+                    description="ТЕСТОВАЯ ЗАПИСЬ. Вымышленный студент; организация из реестра практики 2026. Статус этапа смоделирован; не является заключённым договором.")
                 db.add(agreement);db.flush()
                 db.add(CompanyCard(agreement_id=agreement.id,student_name=student_name,
                     group_name=f"ТЕСТ-26-{(i-1)//10+1}",course_name="3",
