@@ -149,68 +149,51 @@ def show(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     user=require_user(request,db);case,card=get_case(db,user,agreement_id)
     return views.TemplateResponse(request,"company_card_view.html",context(request,user,case=case,card=card))
 
-def add_demo_sections(doc, case, card):
-    """Clearly fictional training details; never a real signature or seal."""
-    from docx.shared import RGBColor
-    def line(label, value):
-        doc.add_paragraph(f"{label}: {value or 'Демонстрационные данные не указаны'}")
-    demo_date=(datetime(2026,1,1)+timedelta(days=int(case.id or 0))).strftime("%d.%m.%Y")
-    line("Дата демонстрационного договора", demo_date)
-    doc.add_page_break()
-    doc.add_heading("6. Адреса и реквизиты сторон", level=1) if "Heading 1" in doc.styles else doc.add_paragraph("6. Адреса и реквизиты сторон")
-    line("Университет", "Учебный университет «Пример» (вымышленная организация)")
-    line("Адрес университета", "г. Москва, Учебная улица, д. 1 (условный адрес)")
-    line("Реквизиты университета", "ИНН: УЧЕБНЫЙ; КПП: УЧЕБНЫЙ; ОКПО: УЧЕБНЫЙ; ОКВЭД: УЧЕБНЫЙ; ОГРН: УЧЕБНЫЙ; тел.: +7 (000) 000-00-00")
-    line("Предприятие", card.company_full_name or "ООО «Учебное предприятие»")
-    line("Адрес предприятия", card.company_address or "г. Москва, Демонстрационная улица, д. 2 (условный адрес)")
-    line("Контакт предприятия", card.company_phone or "Не указан")
-    line("Реквизиты предприятия", "ИНН: "+str(card.company_inn or "УЧЕБНЫЙ")+"; КПП: "+str(card.company_kpp or "УЧЕБНЫЙ")+"; ОКПО: "+str(card.company_okpo or "УЧЕБНЫЙ")+"; ОКВЭД: "+str(card.company_okved or "УЧЕБНЫЙ")+"; ОГРН: "+str(card.company_ogrn or "УЧЕБНЫЙ")+"; тел.: "+str(card.company_phone or "+7 (000) 000-00-00"))
-    line("Помещения профильной организации для проведения практической подготовки", str(card.room_department or "Учебный отдел практической подготовки")+", "+str(card.room_address or "г. Москва, Учебная улица, д. 2, аудитория 101 (условный адрес)"))
-    doc.add_paragraph("7. Подписи сторон")
-    # Render visible blue sample seals in DOCX; LibreOffice carries them into PDF.
+def add_demo_seals_at_mp(doc):
+    """Place visibly invalid demo seals at existing М.П. markers, not on new pages."""
     from PIL import Image, ImageDraw, ImageFont
     from docx.shared import Cm
-    import math
-    stamp=Image.new("RGB",(480,480),"white")
+    from docx.enum.text import WD_BREAK
+    stamp=Image.new("RGB",(360,360),"white")
     draw=ImageDraw.Draw(stamp)
     blue=(23,76,173)
-    for inset,width in ((12,7),(30,3),(72,4)):
-        draw.ellipse((inset,inset,480-inset,480-inset),outline=blue,width=width)
+    for inset,width in ((8,6),(22,3),(49,3)):
+        draw.ellipse((inset,inset,360-inset,360-inset),outline=blue,width=width)
     font_path="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    font=ImageFont.truetype(font_path,32)
-    small=ImageFont.truetype(font_path,20)
-    for y,label,f in ((170,"ОБРАЗЕЦ",font),(235,"УЧЕБНАЯ ПЕЧАТЬ",small),
-                       (274,"НЕ ИМЕЕТ",small),(304,"ЮРИДИЧЕСКОЙ СИЛЫ",small)):
-        draw.text((240,y),label,fill=blue,font=f,anchor="mm")
-    stamp_bytes=io.BytesIO()
-    stamp.save(stamp_bytes,format="PNG")
-    stamp_bytes.seek(0)
-    for party, person in (("Университет", card.university_contact or "Учебный представитель"),
-                          ("Предприятие", card.director_name or "Учебный представитель")):
-        line(party, person)
-        doc.add_paragraph("[ОБРАЗЕЦ ЭЛЕКТРОННОЙ ПОДПИСИ — НЕ ЯВЛЯЕТСЯ ЭП]")
-        doc.add_paragraph("[МАКЕТ ПЕЧАТИ — НЕ ЯВЛЯЕТСЯ ПЕЧАТЬЮ]")
-        stamp_bytes.seek(0)
-        doc.add_picture(stamp_bytes,width=Cm(3.8))
-    doc.add_page_break()
-    doc.add_paragraph("Приложение № 1. Задание на практическую подготовку")
-    for label, value in (("Обучающийся", card.student_name), ("Группа", card.group_name),
-                         ("Программа", card.program), ("Вид практики", case.practice_type),
-                         ("Начало", case.practice_start), ("Окончание", case.practice_end),
-                         ("Руководитель от университета", card.university_contact),
-                         ("Руководитель от предприятия", card.contact_name)):
-        line(label, value)
-    doc.add_paragraph("Учебные задачи: знакомство с организацией, анализ процессов, подготовка отчёта и рекомендаций.")
-    doc.add_paragraph("Приложение № 2. Список обучающихся")
-    line("Обучающийся", card.student_name)
-    line("Группа", card.group_name)
-    line("Период практики", f"{case.practice_start or 'не указан'} — {case.practice_end or 'не указан'}")
-    for section in doc.sections:
-        section.footer.paragraphs[0].text = "ДЕМОНСТРАЦИОННЫЙ ОБРАЗЕЦ — НЕ ИМЕЕТ ЮРИДИЧЕСКОЙ СИЛЫ"
-    notice=doc.add_paragraph("ДЕМОНСТРАЦИОННЫЙ ОБРАЗЕЦ. НЕТ ДЕЙСТВИТЕЛЬНЫХ ЭЛЕКТРОННЫХ ПОДПИСЕЙ И ПЕЧАТЕЙ.")
-    for run in notice.runs:
-        run.bold=True
-        run.font.color.rgb=RGBColor(160,0,0)
+    font=ImageFont.truetype(font_path,25)
+    small=ImageFont.truetype(font_path,14)
+    for y,label,f in ((135,"ОБРАЗЕЦ",font),(182,"УЧЕБНАЯ ПЕЧАТЬ",small),
+                      (208,"НЕ ИМЕЕТ",small),(232,"ЮРИДИЧЕСКОЙ СИЛЫ",small)):
+        draw.text((180,y),label,fill=blue,font=f,anchor="mm")
+    buffer=io.BytesIO()
+    stamp.save(buffer,format="PNG")
+    def put(paragraph):
+        if not re.search(r"М\\s*\\.\\s*П\\s*\\.",paragraph.text,re.I):
+            return
+        # Add the image directly at the existing seal position.
+        for run in paragraph.runs:
+            match=re.search(r"М\\s*\\.\\s*П\\s*\\.",run.text,re.I)
+            if match:
+                before,after=run.text[:match.end()],run.text[match.end():]
+                run.text=before
+                buffer.seek(0)
+                image_run=paragraph.add_run()
+                image_run.add_break()
+                image_run.add_picture(buffer,width=Cm(2.7))
+                if after:paragraph.add_run(after)
+                return
+        buffer.seek(0)
+        paragraph.add_run().add_picture(buffer,width=Cm(2.7))
+    for paragraph in doc.paragraphs:put(paragraph)
+    visited=set()
+    def walk(table):
+        for row in table.rows:
+            for cell in row.cells:
+                if cell._tc in visited:continue
+                visited.add(cell._tc)
+                for paragraph in cell.paragraphs:put(paragraph)
+                for nested in cell.tables:walk(nested)
+    for table in doc.tables:walk(table)
 
 
 def build_demo_docx(case,card):
@@ -232,7 +215,7 @@ def build_demo_docx(case,card):
     ]:
         doc.add_paragraph(f"{label}: {value or 'Не указано'}")
     doc.add_paragraph("Реальные согласования и электронные подписи отсутствуют.")
-    add_demo_sections(doc,case,card)
+    add_demo_seals_at_mp(doc)
     buffer=io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -371,13 +354,10 @@ def build_docx(case,card):
     if case.is_demo:
         from docx.shared import RGBColor
         demo_date=values["contract_date"]
-        doc.add_paragraph("Дата учебного экземпляра договора: "+demo_date)
         if demo_completed:
             heading=doc.add_paragraph("Демонстрационный блок подписания")
             for run in heading.runs:run.bold=True
             doc.add_paragraph("Вымышленный представитель предприятия: "+demo_director)
-            doc.add_paragraph("Подпись: [ДЕМОНСТРАЦИОННЫЙ МАКЕТ — НЕ ПОДПИСЬ]")
-            doc.add_paragraph("Печать: [ОБРАЗЕЦ · НЕ ДЕЙСТВИТЕЛЬНО]")
             doc.add_paragraph("Согласование завершено только в тестовом сценарии. Реальных УКЭП и печатей нет.")
         notice=doc.add_paragraph("ТЕСТОВЫЙ ЭКЗЕМПЛЯР. НЕ ИМЕЕТ ЮРИДИЧЕСКОЙ СИЛЫ. ДАННЫЕ ДЕМОНСТРАЦИОННЫЕ.")
         notice.style=doc.styles["Normal"]
@@ -386,7 +366,7 @@ def build_docx(case,card):
             run.font.size=Pt(9)
             run.font.color.rgb=RGBColor(150,0,0)
     if case.is_demo:
-        add_demo_sections(doc,case,card)
+        add_demo_seals_at_mp(doc)
     buffer=io.BytesIO()
     doc.save(buffer);buffer.seek(0)
     return buffer
