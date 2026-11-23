@@ -9,6 +9,10 @@ from sqlalchemy import select,delete
 from app.database import SessionLocal
 from app.models import Agreement,QualifiedSignature,Attachment,AgreementNote,CompanyCard,Task,PartnerInvite,AuditEvent
 with SessionLocal() as db:
+    already=db.scalar(select(AuditEvent.id).where(AuditEvent.action=="legacy_contract_removed").limit(1))
+    if already:
+        print("Legacy completion cleanup: already performed; no action")
+        raise SystemExit(0)
     matches=db.scalars(select(Agreement).where(Agreement.status=="COMPLETED",Agreement.is_demo.is_(False))).all()
     if len(matches)!=1:
         print(f"Legacy completion cleanup: expected exactly one, found {len(matches)}; no deletion")
