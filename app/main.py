@@ -458,7 +458,7 @@ def team(request:Request,db:Session=Depends(get_db)):
 @app.post("/team/document-template")
 async def upload_practice_template(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
-    require_role(user,{"MANAGER"})
+    require_role(user,{"MANAGER","OFFICE"})
     form=await request.form()
     require_csrf(request,form)
     uploaded=form.get("file")
