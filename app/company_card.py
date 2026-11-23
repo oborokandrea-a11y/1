@@ -455,6 +455,22 @@ def overlay_demo_marks_pdf(pdf_bytes,case):
     for y,label,face in ((155,"ОБРАЗЕЦ",large),(207,"ЭЛЕКТРОННАЯ",small),
                           (245,"ПОДПИСЬ",small),(284,"НЕ УКЭП",small)):
         draw.text((200,y),label,fill=ink,font=face,anchor="mm")
+    # Separate rectangular signing-status label, as in the supplied example.
+    label_image=Image.new("RGBA",(900,220),(255,255,255,245))
+    ld=ImageDraw.Draw(label_image)
+    ld.rounded_rectangle((5,5,895,215),radius=22,outline=ink,width=7)
+    try:
+        label_font=ImageFont.truetype(font,32)
+        foot_font=ImageFont.truetype(font,27)
+    except (OSError,UnboundLocalError):
+        label_font=foot_font=ImageFont.load_default()
+    for y,line,face in ((49,"ДОКУМЕНТ ПОДПИСАН",label_font),
+                         (91,"ЭЛЕКТРОННОЙ ПОДПИСЬЮ",label_font),
+                         (133,"(ИМИТАЦИЯ)",label_font),
+                         (181,"ОБРАЗЕЦ — НЕ ИМЕЕТ ЮРИДИЧЕСКОЙ СИЛЫ",foot_font)):
+        ld.text((450,y),line,font=face,fill=ink,anchor="mm")
+    label_bytes=io.BytesIO()
+    label_image.save(label_bytes,format="PNG")
     stamp=io.BytesIO()
     image.save(stamp,format="PNG")
     pdf=fitz.open(stream=pdf_bytes,filetype="pdf")
@@ -498,6 +514,22 @@ def overlay_demo_marks_pdf(pdf_bytes,case):
             area=area & page.rect
             if area.is_empty:continue
             page.insert_image(area,stream=stamp.getvalue(),overlay=True,keep_proportion=True)
+            # Keep each label inside the corresponding half-page signing column.
+            column_left=0 if side=="left" else page.rect.width/2
+            column_right=page.rect.width/2 if side=="left" else page.rect.width
+            label_w=min(134,(column_right-column_left)-16)
+            label_h=label_w*220/900
+            gap=5
+            if area.x1+gap+label_w <= column_right-6:
+                label_x=area.x1+gap
+            elif area.x0-gap-label_w >= column_left+6:
+                label_x=area.x0-gap-label_w
+            else:
+                label_x=max(column_left+6,min(cx-label_w/2,column_right-label_w-6))
+            label_y=max(6,min(cy-label_h/2,page.rect.height-label_h-6))
+            label_rect=fitz.Rect(label_x,label_y,label_x+label_w,label_y+label_h)
+            page.insert_image(label_rect,stream=label_bytes.getvalue(),
+                              overlay=True,keep_proportion=True)
             placed+=1
             seen.add(side)
         diagnostics.append(f"{page_number}:{len(seen)}")
