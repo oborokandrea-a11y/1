@@ -143,6 +143,31 @@ def show(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     user=require_user(request,db);case,card=get_case(db,user,agreement_id)
     return views.TemplateResponse(request,"company_card_view.html",context(request,user,case=case,card=card))
 
+def build_demo_docx(case,card):
+    """Clearly marked test-only document, never an official agreement."""
+    doc=Document()
+    section=doc.sections[0]
+    section.header.paragraphs[0].text="ЦИФРА ЭДО · ТЕСТОВЫЙ РЕЖИМ"
+    doc.add_heading("Демонстрационная карточка договора",0)
+    doc.add_paragraph("ТЕСТОВЫЙ ДОКУМЕНТ. НЕ ЯВЛЯЕТСЯ ДОГОВОРОМ И НЕ ПОДЛЕЖИТ ПОДПИСАНИЮ.")
+    for label,value in [
+        ("Студент",card.student_name),
+        ("Группа",card.group_name),
+        ("Организация",card.company_full_name),
+        ("Адрес",card.company_address),
+        ("Вид практики",case.practice_type),
+        ("Начало практики",case.practice_start),
+        ("Окончание практики",case.practice_end),
+        ("Текущий этап (симуляция)",case.status),
+    ]:
+        doc.add_paragraph(f"{label}: {value or 'Не указано'}")
+    doc.add_paragraph("Реальные согласования и электронные подписи отсутствуют.")
+    buffer=io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+
 def build_docx(case,card):
     # The approved, unchanged legal text is supplied as a DOCX template.
     # Never substitute an abbreviated contract when the approved template
@@ -151,6 +176,8 @@ def build_docx(case,card):
     with SessionLocal() as template_db:
         latest=template_db.scalar(select(DocumentTemplate).where(DocumentTemplate.template_kind=="practice_agreement").order_by(DocumentTemplate.id.desc()).limit(1))
         if not latest:
+            if case.is_demo:
+                return build_demo_docx(case,card)
             raise HTTPException(503,"Типовой договор образовательной организации ещё не установлен. Формирование временно недоступно.")
         template_bytes=get_file(latest.object_key)
     doc=Document(io.BytesIO(template_bytes))
