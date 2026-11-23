@@ -122,9 +122,13 @@ def as_date(value):
     except ValueError: return None
 
 def scoped_agreements(db,user):
-    stmt=select(Agreement).where(Agreement.is_demo.is_(True) if user.username.endswith("-demo") or user.username.startswith("cifra-test-student-") else Agreement.is_demo.is_(False))
-    if user.role=="STUDENT":stmt=stmt.where(Agreement.student_id==user.id)
-    elif user.role=="ENTERPRISE":stmt=stmt.where(Agreement.enterprise_user_id==user.id)
+    # Staff must see real submitted agreements alongside the 29 demo cases.
+    # Student access is always restricted to their own agreements.
+    stmt=select(Agreement)
+    if user.role=="STUDENT":
+        stmt=stmt.where(Agreement.student_id==user.id)
+    elif user.role=="ENTERPRISE":
+        stmt=stmt.where(Agreement.enterprise_user_id==user.id)
     return stmt
 
 def read_case(db,user,agreement_id):
@@ -213,7 +217,6 @@ def dashboard(request:Request,db:Session=Depends(get_db)):
 @app.get("/agreements",response_class=HTMLResponse)
 def agreements(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
-    if user.role=="STUDENT":return go("/dashboard")
     status=request.query_params.get("status","")
     q=scoped_agreements(db,user)
     if status in STATUS_LABELS:q=q.where(Agreement.status==status)
