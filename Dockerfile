@@ -10,4 +10,4 @@ COPY data ./data
 COPY scripts ./scripts
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
-CMD ["sh", "-c", "python -m scripts.initialize_public && python -m scripts.initialize_roles && python -m scripts.initialize_workflows && python -m scripts.initialize_showcase && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers"]
+CMD ["sh", "-c", "python -m scripts.initialize_public && python -m scripts.initialize_roles && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers"]
