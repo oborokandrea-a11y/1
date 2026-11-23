@@ -499,3 +499,5 @@ async def password_change(request:Request,db:Session=Depends(get_db)):
 
 @app.get("/health")
 def health():return {"status":"ok","service":"cifra"}
+from .company_card import router as company_card_router
+app.include_router(company_card_router)
