@@ -58,7 +58,7 @@ def can_view_agreement(user:User, agreement:Agreement)->bool:
     if user.role in STAFF_ROLES:
         return True
     if user.role=="STUDENT":
-        return user.id==agreement.student_id
+        return user.id==agreement.student_id and not agreement.is_demo
     if user.role=="ENTERPRISE":
         return user.id==agreement.enterprise_user_id
     return False
