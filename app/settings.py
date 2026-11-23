@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     SMTP_SSL: bool = False
     UNIVERSITY_WEBHOOK_URL: str = ""
     UNIVERSITY_WEBHOOK_SECRET: str = ""
+    UKEP_VERIFY_URL: str = ""
+    UKEP_VERIFY_TOKEN: str = ""
 
     @property
     def production(self) -> bool:
