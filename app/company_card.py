@@ -211,11 +211,17 @@ def build_docx(case,card):
 
 
 @router.get("/agreements/{agreement_id}/generate-docx")
+def download_filename(case, card, ext):
+    from urllib.parse import quote
+    parts=(card.student_name or "").split()
+    label=(parts[0]+" "+parts[1][0]+"."+parts[2][0]+".") if len(parts)>=3 else (" ".join(parts) or "Договор")
+    return "attachment; filename=agreement_"+str(case.id)+"."+ext+"; filename*=UTF-8"+chr(39)*2+quote(label+"."+ext)
+
 def download(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     user=require_user(request,db);case,card=get_case(db,user,agreement_id)
     out=build_docx(case,card)
     return StreamingResponse(out,media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-       headers={"Content-Disposition":f'attachment; filename="cifra_agreement_{case.id}_draft.docx"',
+       headers={"Content-Disposition":download_filename(case,card,"docx"),
                 "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
 
 
@@ -267,5 +273,5 @@ def download_pdf(request:Request,agreement_id:int,db:Session=Depends(get_db)):
             raise HTTPException(503,"Не удалось сформировать PDF. Попробуйте скачать Word.")
         content=pdf_path.read_bytes()
     return StreamingResponse(io.BytesIO(content),media_type="application/pdf",
-        headers={"Content-Disposition":f'attachment; filename="cifra_agreement_{case.id}_draft.pdf"',
+        headers={"Content-Disposition":download_filename(case,card,"pdf"),
                  "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
