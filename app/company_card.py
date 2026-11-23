@@ -81,6 +81,54 @@ async def submit(request:Request,db:Session=Depends(get_db)):
     db.commit()
     return RedirectResponse(f"/agreements/{case.id}/company-card",status_code=303)
 
+@router.get("/agreements/{agreement_id}/company-card/edit")
+def edit_card_form(request:Request,agreement_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    case,card=get_case(db,user,agreement_id)
+    if user.role!="STUDENT" or case.student_id!=user.id:
+        raise HTTPException(403,"Редактирование доступно только владельцу карточки")
+    if case.status not in {"DRAFT","REVISION_REQUIRED"}:
+        return views.TemplateResponse(request,"company_card_view.html",
+            context(request,user,case=case,card=card,edit_locked=True))
+    return views.TemplateResponse(request,"company_card.html",
+        context(request,user,card=card,case=case,editing=True))
+
+@router.post("/agreements/{agreement_id}/company-card/edit")
+async def edit_card_post(request:Request,agreement_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    case,card=get_case(db,user,agreement_id)
+    if user.role!="STUDENT" or case.student_id!=user.id:raise HTTPException(403,"Нет доступа")
+    if case.status not in {"DRAFT","REVISION_REQUIRED"}:
+        raise HTTPException(409,"Карточка уже на согласовании. Изменения возможны после возврата на доработку.")
+    f=await request.form()
+    require_csrf(request,f)
+    data={key:safe(f.get(key)) for key in FIELDS}
+    required=("student_name","group_name","department","program","company_full_name","company_address",
+              "company_inn","director_position","director_name","director_basis",
+              "contact_name","contact_phone","room_address")
+    for key in required:
+        if not data[key]:raise HTTPException(422,"Не заполнено обязательное поле: "+key)
+    if not data["company_inn"].isdigit() or len(data["company_inn"]) not in (10,12):
+        raise HTTPException(422,"ИНН должен состоять из 10 или 12 цифр")
+    start=safe(f.get("practice_start"),10)
+    end=safe(f.get("practice_end"),10)
+    try:
+        if datetime.strptime(start,"%Y-%m-%d")>datetime.strptime(end,"%Y-%m-%d"):raise ValueError()
+    except ValueError:raise HTTPException(422,"Укажите корректный период практики")
+    practice=safe(f.get("practice_type"),70)
+    if practice not in ("Производственная","Учебная","Преддипломная"):
+        raise HTTPException(422,"Неверный вид практики")
+    for key,value in data.items():setattr(card,key,value)
+    card.practice_paid=f.get("practice_paid")=="yes"
+    case.practice_type=practice
+    case.practice_start=start
+    case.practice_end=end
+    case.company_name=data["company_full_name"][:210]
+    case.title="Договор о практической подготовке — "+data["company_full_name"][:140]
+    log_event(db,user,"company_card_edited","agreement",case.id,"Изменена существующая карточка без создания нового договора")
+    db.commit()
+    return RedirectResponse(f"/agreements/{case.id}/company-card",status_code=303)
+
 def get_case(db,user,agreement_id):
     case=db.get(Agreement,agreement_id)
     if not case:raise HTTPException(404,"Договор не найден")
