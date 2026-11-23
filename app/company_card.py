@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import select, update
+from sqlalchemy import select, update, text
 from docx import Document
 from docx.shared import Pt, Cm
 from .database import get_db
@@ -62,11 +62,12 @@ async def submit(request:Request,db:Session=Depends(get_db)):
         title="Договор о практической подготовке — "+data["company_full_name"][:140],
         student_id=user.id,company_name=data["company_full_name"][:210],
         practice_type=practice,practice_start=start,practice_end=end,
-        status="DRAFT",signing_order="partner_first",description="Создано из анкеты предприятия. Черновик требует проверки университетом.")
+        status="DRAFT",signing_order="enterprise_first",description="Создано из анкеты предприятия. Черновик требует проверки университетом.")
     db.add(case);db.flush()
     # Monotonic database-generated identifier, independent of simultaneous submissions.
     # Official university numbering requires a verified starting point and approval.
     year=datetime.utcnow().year
+    db.execute(text("INSERT INTO agreement_number_sequences (year, last_number) VALUES (:year, 1100) ON CONFLICT (year) DO NOTHING"),{"year":year})
     number=db.scalar(update(AgreementNumberSequence).where(AgreementNumberSequence.year==year).values(last_number=AgreementNumberSequence.last_number+1).returning(AgreementNumberSequence.last_number))
     if number is None:raise HTTPException(503,"Нумерация договоров не настроена")
     case.reference=f"{number}/{year % 100:02d}"
