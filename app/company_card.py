@@ -295,7 +295,8 @@ def build_docx(case,card):
     if case.is_demo:
         from docx.shared import RGBColor
         if demo_completed:
-            doc.add_heading("Демонстрационный блок подписания",level=2)
+            heading=doc.add_paragraph("Демонстрационный блок подписания")
+            for run in heading.runs:run.bold=True
             doc.add_paragraph("Вымышленный представитель предприятия: "+demo_director)
             doc.add_paragraph("Подпись: [ДЕМОНСТРАЦИОННЫЙ МАКЕТ — НЕ ПОДПИСЬ]")
             doc.add_paragraph("Печать: [ОБРАЗЕЦ · НЕ ДЕЙСТВИТЕЛЬНО]")
