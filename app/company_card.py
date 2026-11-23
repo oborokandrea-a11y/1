@@ -255,13 +255,32 @@ def build_docx(case,card):
                     for idx in range(first+1,last):runs[idx].text=""
                     runs[last].text=after
     for paragraph in doc.paragraphs:replace_runs(paragraph)
+    # XML cell wrappers can be recreated for each access; id(cell._tc)
+    # may be reused and incorrectly skip other cells. Deduplicate by
+    # the underlying XML element, not its temporary Python object id.
     visited=set()
+    def process_table(table):
+        for row in table.rows:
+            for cell in row.cells:
+                if cell._tc in visited:continue
+                visited.add(cell._tc)
+                for paragraph in cell.paragraphs:replace_runs(paragraph)
+                for nested in cell.tables:process_table(nested)
+    for table in doc.tables:process_table(table)
+    for section in doc.sections:
+        for part in (section.header,section.footer):
+            for paragraph in part.paragraphs:replace_runs(paragraph)
+            for table in part.tables:process_table(table)
+    unresolved=[]
+    for paragraph in doc.paragraphs:
+        unresolved.extend(re.findall(r"\\{\\{[^{}]+\\}\\}",paragraph.text))
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                if id(cell._tc) in visited:continue
-                visited.add(id(cell._tc))
-                for paragraph in cell.paragraphs:replace_runs(paragraph)
+                for paragraph in cell.paragraphs:
+                    unresolved.extend(re.findall(r"\\{\\{[^{}]+\\}\\}",paragraph.text))
+    if unresolved:
+        raise HTTPException(422,"В шаблоне остались незаполненные поля: "+", ".join(sorted(set(unresolved))))
     # Mark generated demo documents as non-signable while retaining all
     # legal sections, tables and appendices from the approved template.
     if case.is_demo:
