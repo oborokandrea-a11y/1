@@ -139,9 +139,10 @@ with SessionLocal() as db:
         else:
             created=0
             for i in range(1,30):
-                reference=f"TEST-CIFRA-2026-{i:03d}"
-                existing=db.scalar(select(Agreement).where(Agreement.reference==reference))
+                old_reference=f"TEST-CIFRA-2026-{i:03d}"
                 student_name=f"{SURNAMES[i-1]} {NAMES[(i-1)%len(NAMES)]} {PATRONYMICS[(i-1)%len(PATRONYMICS)]}"
+                reference=f"{SURNAMES[i-1]} {NAMES[(i-1)%len(NAMES)][0]}.{PATRONYMICS[(i-1)%len(PATRONYMICS)][0]}."
+                existing=db.scalar(select(Agreement).where(Agreement.reference.in_([old_reference,reference])))
                 login=f"cifra-test-student-{i:02d}"
                 student=db.scalar(select(User).where(User.username==login))
                 if not student:
@@ -150,6 +151,7 @@ with SessionLocal() as db:
                     db.add(student);db.flush()
                 company,address=COMPANIES[i-1]
                 if existing:
+                    existing.reference=reference
                     existing.company_name=company
                     existing.description='ТЕСТОВАЯ ЗАПИСЬ: вымышленный студент, организация из реестра практики 2026. Договор не подписан.'
                     card=db.scalar(select(CompanyCard).where(CompanyCard.agreement_id==existing.id))
