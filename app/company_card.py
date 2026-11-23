@@ -2,7 +2,7 @@
 import io
 import re
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -154,15 +154,18 @@ def add_demo_sections(doc, case, card):
     from docx.shared import RGBColor
     def line(label, value):
         doc.add_paragraph(f"{label}: {value or 'Демонстрационные данные не указаны'}")
+    demo_date=(datetime(2026,1,1)+timedelta(days=int(case.id or 0))).strftime("%d.%m.%Y")
+    line("Дата демонстрационного договора", demo_date)
     doc.add_page_break()
     doc.add_heading("6. Адреса и реквизиты сторон", level=1) if "Heading 1" in doc.styles else doc.add_paragraph("6. Адреса и реквизиты сторон")
     line("Университет", "Учебный университет «Пример» (вымышленная организация)")
     line("Адрес университета", "г. Москва, Учебная улица, д. 1 (условный адрес)")
-    line("Реквизиты университета", "ИНН: ДЕМО; КПП: ДЕМО; ОГРН: ДЕМО; расчётный счёт: ДЕМО")
+    line("Реквизиты университета", "ИНН: УЧЕБНЫЙ; КПП: УЧЕБНЫЙ; ОКПО: УЧЕБНЫЙ; ОКВЭД: УЧЕБНЫЙ; ОГРН: УЧЕБНЫЙ; тел.: +7 (000) 000-00-00")
     line("Предприятие", card.company_full_name or "ООО «Учебное предприятие»")
     line("Адрес предприятия", card.company_address or "г. Москва, Демонстрационная улица, д. 2 (условный адрес)")
     line("Контакт предприятия", card.company_phone or "Не указан")
-    line("Реквизиты предприятия", "ИНН: ДЕМО; КПП: ДЕМО; ОГРН: ДЕМО; БИК: ДЕМО; расчётный счёт: ДЕМО")
+    line("Реквизиты предприятия", "ИНН: "+str(card.company_inn or "УЧЕБНЫЙ")+"; КПП: "+str(card.company_kpp or "УЧЕБНЫЙ")+"; ОКПО: "+str(card.company_okpo or "УЧЕБНЫЙ")+"; ОКВЭД: "+str(card.company_okved or "УЧЕБНЫЙ")+"; ОГРН: "+str(card.company_ogrn or "УЧЕБНЫЙ")+"; тел.: "+str(card.company_phone or "+7 (000) 000-00-00"))
+    line("Помещения профильной организации для проведения практической подготовки", str(card.room_department or "Учебный отдел практической подготовки")+", "+str(card.room_address or "г. Москва, Учебная улица, д. 2, аудитория 101 (условный адрес)"))
     doc.add_paragraph("7. Подписи сторон")
     # Render visible blue sample seals in DOCX; LibreOffice carries them into PDF.
     from PIL import Image, ImageDraw, ImageFont
@@ -266,17 +269,19 @@ def build_docx(case,card):
     director_for_document=demo_director or card.director_name
     values={
         "contract_number":case.reference,
-        "contract_date":(case.created_at.strftime("%d.%m.%Y") if case.created_at else datetime.utcnow().strftime("%d.%m.%Y")),
+        "contract_date":((datetime(2026,1,1)+timedelta(days=int(case.id or 0))).strftime("%d.%m.%Y") if case.is_demo else (case.created_at.strftime("%d.%m.%Y") if case.created_at else datetime.utcnow().strftime("%d.%m.%Y"))),
         "company_full_name":card.company_full_name,
         "company_short_name":card.company_short_name or "________________",
         "company_address":card.company_address,
         "company_address_short":card.company_address,
-        "company_phone":card.company_phone or "________________",
-        "company_inn":card.company_inn or "________________",
-        "company_kpp":card.company_kpp or "________________",
-        "company_ogrn":card.company_ogrn or "________________",
-        "company_okpo":card.company_okpo or "________________",
-        "company_okved":card.company_okved or "________________",
+        "company_phone":card.company_phone or ("+7 (000) 000-00-00" if case.is_demo else "________________"),
+        "company_inn":card.company_inn or ("УЧЕБНЫЙ" if case.is_demo else "________________"),
+        "company_kpp":card.company_kpp or ("УЧЕБНЫЙ" if case.is_demo else "________________"),
+        "company_ogrn":card.company_ogrn or ("УЧЕБНЫЙ" if case.is_demo else "________________"),
+        "company_okpo":card.company_okpo or ("УЧЕБНЫЙ" if case.is_demo else "________________"),
+        "company_okved":card.company_okved or ("УЧЕБНЫЙ" if case.is_demo else "________________"),
+        "room_department":card.room_department or ("Учебный отдел практической подготовки" if case.is_demo else "________________"),
+        "room_address":card.room_address or ("г. Москва, Учебная улица, д. 2, аудитория 101 (условный адрес)" if case.is_demo else "________________"),
         "director_name":director_for_document if director_for_document and director_for_document!="Не указано" else "________________",
         "director_name_genitive":director_genitive(director_for_document),
         "director_initials":director_initials(director_for_document),
@@ -356,6 +361,8 @@ def build_docx(case,card):
     # legal sections, tables and appendices from the approved template.
     if case.is_demo:
         from docx.shared import RGBColor
+        demo_date=values["contract_date"]
+        doc.add_paragraph("Дата учебного экземпляра договора: "+demo_date)
         if demo_completed:
             heading=doc.add_paragraph("Демонстрационный блок подписания")
             for run in heading.runs:run.bold=True
