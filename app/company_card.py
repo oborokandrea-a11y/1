@@ -1,7 +1,6 @@
 """Company questionnaire and downloadable editable draft agreement (not a signature)."""
 import io
 import re
-import secrets
 from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -19,7 +18,7 @@ from fastapi.templating import Jinja2Templates
 router=APIRouter()
 views=Jinja2Templates(directory=str(ROOT/"templates"))
 FIELDS = ("student_name","group_name","course_name","department","program","company_full_name","company_address",
-"company_inn","company_kpp","company_ogrn","company_okpo","company_okved","director_position",
+"company_short_name","residency","registration_country","company_actual_address","company_phone","company_fax","bank_account","bank_name","correspondent_account","bank_bik","company_inn","company_kpp","company_ogrn","company_okpo","company_okved","director_position",
 "director_name","director_basis","contact_name","contact_phone","contact_email",
 "room_department","room_address","university_contact","university_phone","university_email")
 
@@ -59,12 +58,15 @@ async def submit(request:Request,db:Session=Depends(get_db)):
     practice=safe(f.get("practice_type"),70)
     if practice not in ("Производственная","Учебная","Преддипломная"):
         raise HTTPException(422,"Неверный вид практики")
-    case=Agreement(reference="CF-"+secrets.token_hex(5).upper(),
+    case=Agreement(reference="PENDING",
         title="Договор о практической подготовке — "+data["company_full_name"][:140],
         student_id=user.id,company_name=data["company_full_name"][:210],
         practice_type=practice,practice_start=start,practice_end=end,
-        status="DRAFT",description="Создано из анкеты предприятия. Черновик требует проверки университетом.")
+        status="DRAFT",signing_order="partner_first",description="Создано из анкеты предприятия. Черновик требует проверки университетом.")
     db.add(case);db.flush()
+    # Monotonic database-generated identifier, independent of simultaneous submissions.
+    # Official university numbering requires a verified starting point and approval.
+    case.reference=f"ПР-{case.id:06d}/{datetime.utcnow().year % 100:02d}"
     card=CompanyCard(agreement_id=case.id,practice_paid=f.get("practice_paid")=="yes",**data)
     db.add(card);log_event(db,user,"company_card_created","agreement",case.id,"Студент заполнил карточку предприятия")
     db.commit()
@@ -99,7 +101,7 @@ def build_docx(case,card):
         para=doc.add_paragraph();para.alignment=1;run=para.add_run(text);run.bold=True
     def date_ru(s):
         return datetime.strptime(s,"%Y-%m-%d").strftime("%d.%m.%Y")
-    heading("Договор № __________")
+    heading("Проект договора № "+case.reference)
     heading("об организации и проведении практической подготовки обучающихся НИТУ МИСИС")
     p("Дата заключения: «___» __________ 20___ г.")
     p("Федеральное государственное автономное образовательное учреждение высшего образования «Национальный исследовательский технологический университет «МИСИС», именуемое далее «Университет», в лице уполномоченного представителя ____________________, действующего на основании ____________________, с одной стороны, и "+card.company_full_name+", именуемое далее «Профильная организация», в лице "+card.director_position+" "+card.director_name+", действующего на основании "+card.director_basis+", с другой стороны, заключили настоящий договор.")
@@ -123,7 +125,9 @@ def build_docx(case,card):
     p("5.4. Контактное лицо университета: "+(card.university_contact or "________________")+", тел. "+(card.university_phone or "________________")+", e-mail "+(card.university_email or "________________")+".")
     heading("6 Адреса и реквизиты сторон")
     p("Университет: НИТУ МИСИС, 119049, Москва, Ленинский проспект, д. 4, стр. 1. ИНН 7706019535, КПП 770601001.")
-    p("Профильная организация: "+card.company_full_name+", "+card.company_address+", ИНН "+card.company_inn+", КПП "+card.company_kpp+", ОГРН "+card.company_ogrn+", ОКПО "+card.company_okpo+", ОКВЭД "+card.company_okved+".")
+    p("Профильная организация: "+card.company_full_name+" ("+card.company_short_name+"), "+card.company_address+", ИНН "+card.company_inn+", КПП "+card.company_kpp+", ОГРН "+card.company_ogrn+", ОКПО "+card.company_okpo+", ОКВЭД "+card.company_okved+".")
+    p("Фактический адрес: "+card.company_actual_address+"; телефон: "+card.company_phone+"; факс: "+card.company_fax+".")
+    p("Банковские реквизиты: "+card.bank_name+", расчётный счёт "+card.bank_account+", корреспондентский счёт "+card.correspondent_account+", БИК "+card.bank_bik+".")
     p("От Университета: ____________________     От Профильной организации: "+card.director_name)
     p("Подпись: ______________ М.П.                     Подпись: ______________ М.П.")
     doc.add_page_break()
@@ -157,3 +161,41 @@ def download(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     return StreamingResponse(out,media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
        headers={"Content-Disposition":f'attachment; filename="cifra_agreement_{case.id}_draft.docx"',
                 "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
+
+
+@router.get("/agreements/{agreement_id}/generate-pdf")
+def download_pdf(request:Request,agreement_id:int,db:Session=Depends(get_db)):
+    """Private unsigned PDF preview of the agreement and both annexes."""
+    from xml.sax.saxutils import escape
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.lib import colors
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.pagesizes import A4
+    user=require_user(request,db);case,card=get_case(db,user,agreement_id)
+    font="/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    pdfmetrics.registerFont(TTFont("CifraSans",font))
+    normal=ParagraphStyle("body",fontName="CifraSans",fontSize=9,leading=14,spaceAfter=9)
+    heading=ParagraphStyle("head",parent=normal,fontSize=11,leading=16,alignment=TA_CENTER,spaceAfter=14)
+    out=io.BytesIO();pdf=SimpleDocTemplate(out,pagesize=A4,leftMargin=48,rightMargin=48,topMargin=45,bottomMargin=45)
+    def para(t,style=normal):return Paragraph(escape(str(t or "")),style)
+    def dr(s):return datetime.strptime(s,"%Y-%m-%d").strftime("%d.%m.%Y")
+    story=[para("ПРОЕКТ ДОГОВОРА № "+case.reference,heading),para("Об организации и проведении практической подготовки обучающихся НИТУ МИСИС",heading),
+      para("Документ сформирован автоматически. Не подписан. Требует проверки университетом."),
+      para("ФГАОУ ВО «НИТУ МИСИС» (Университет) и "+card.company_full_name+" (Профильная организация) в лице "+card.director_position+" "+card.director_name+", действующего на основании "+card.director_basis+", заключают договор о практической подготовке."),
+      para("1. Предмет договора",heading),para("Стороны организуют практическую подготовку обучающегося в соответствии с совместным рабочим планом (приложение № 1) и перечнем помещений (приложение № 2)."),
+      para("2. Права и обязанности сторон",heading),para("Университет организует и контролирует практику. Профильная организация предоставляет условия для практической подготовки, обеспечивает инструктаж и соблюдение требований безопасности."),
+      para("3. Срок действия договора",heading),para("Договор действует со дня подписания до "+dr(case.practice_end)+"."),
+      para("4. Ответственность сторон",heading),para("Стороны несут ответственность в соответствии с законодательством Российской Федерации."),
+      para("5. Заключительные положения",heading),para("Изменения оформляются письменно и подписываются уполномоченными представителями."),
+      para("6. Реквизиты и подписи",heading),para("Университет: НИТУ МИСИС, Москва, Ленинский проспект, д. 4, стр. 1."),
+      para("Предприятие: "+card.company_full_name+"; адрес: "+card.company_address+"; ИНН: "+card.company_inn+"; КПП: "+card.company_kpp+"; ОГРН: "+card.company_ogrn+"."),
+      para("Банк: "+card.bank_name+"; расчётный счёт: "+card.bank_account+"; корр. счёт: "+card.correspondent_account+"; БИК: "+card.bank_bik+"."),
+      para("От университета: ____________________    От предприятия: ____________________"),PageBreak(),
+      para("Приложение № 1. Совместный рабочий план",heading)]
+    rows=[("Вид практики",case.practice_type),("Кафедра",card.department),("Курс и группа",card.course_name+" "+card.group_name),("Программа",card.program),("Сроки",dr(case.practice_start)+" — "+dr(case.practice_end)),("Студент",card.student_name)]
+    t=Table([[para(k),para(v)] for k,v in rows],colWidths=[155,340],hAlign="LEFT");t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.4,colors.grey),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8)]));story.extend([t,PageBreak(),para("Приложение № 2. Помещения для практики",heading),para("Подразделение: "+card.room_department),para("Адрес: "+card.room_address)])
+    pdf.build(story);out.seek(0)
+    return StreamingResponse(out,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="cifra_agreement_{case.id}_unsigned.pdf"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
