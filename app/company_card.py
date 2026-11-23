@@ -346,6 +346,20 @@ def build_docx(case,card):
                 for paragraph in cell.paragraphs:replace_runs(paragraph)
                 for nested in cell.tables:process_table(nested)
     for table in doc.tables:process_table(table)
+    if case.is_demo:
+        # Populate the existing rooms table, without appending any new pages.
+        for table in doc.tables:
+            for row in table.rows:
+                cells=row.cells
+                if len(cells)<3:continue
+                first=cells[0].text.strip()
+                second=cells[1].text.strip()
+                third=cells[2].text.strip()
+                if first in ("1", "1.", "1. ") and ("г. Москва" in third or not second or not third):
+                    room_name=card.room_department or "Отдел аналитики и практической подготовки"
+                    room_address=card.room_address or "г. Москва, ул. Учебная, д. 12, этаж 3, кабинет 305 (условный адрес)"
+                    cells[1].text=room_name
+                    cells[2].text=room_address
     for section in doc.sections:
         for part in (section.header,section.footer):
             for paragraph in part.paragraphs:replace_runs(paragraph)
