@@ -1,6 +1,25 @@
 {% extends 'base.html' %}{% block title %}{{case.reference}} — Цифра{% endblock %}{% block crumb %}Договор {{case.reference}}{% endblock %}
 {% block content %}<div class="page-heading"><div><div class="kicker"><a href="/agreements">ДОГОВОРЫ</a> / {{case.reference}}</div><h1>{{case.title}}</h1><p>Уникальный номер {{case.reference}} · {{case.practice_type}} практика</p></div><span class="status-pill status-large {{'done' if case.status=='COMPLETED' else 'revision' if case.status=='REVISION_REQUIRED' else 'inprogress'}}">{{status_labels.get(case.status,case.status)}}</span></div>
-<section class="panel wide-panel"><div class="panel-header"><h2>Маршрут согласования</h2><p>Каждое решение фиксируется в журнале</p></div><div class="steps-line">{% for step in step_names %}<div class="step {{'step-done' if loop.index0<step_index else 'step-active' if loop.index0==step_index and case.status!='REVISION_REQUIRED' else ''}}"><span>{{'✓' if loop.index0<step_index else loop.index}}</span><small>{{status_labels.get(step,step)}}</small></div>{% endfor %}</div><div class="important-notice">Порядок сторон: {{'сначала университет' if case.signing_order=='university_first' else 'сначала предприятие'}}. Отметка об одобрении фиксирует внутреннее согласование в системе, а не юридически значимую УКЭП.</div></section>
+<section class="panel wide-panel"><div class="panel-header"><h2>Маршрут согласования</h2><p>Каждое решение фиксируется в журнале</p></div><div class="steps-line">{% for step in step_names %}<div class="step {{'step-done' if loop.index0<step_index else 'step-active' if loop.index0==step_index and case.status!='REVISION_REQUIRED' else ''}}"><span>{{'✓' if loop.index0<step_index else loop.index}}</span><small>{{status_labels.get(step,step)}}</small></div>{% endfor %}</div><div class="important-notice">Порядок сторон: {{'сначала университет' if case.signing_order=='university_first' else 'сначала предприятие'}}. Внутреннее согласование и подписание УКЭП — отдельные действия.</div></section>
+<section class="panel wide-panel" id="ukep-signatures">
+<div class="panel-header"><div><h2>Усиленные квалифицированные электронные подписи</h2><p>Юридически значимое подписание окончательной версии PDF с проверкой сертификатов и полномочий</p></div></div>
+{% if signatures %}
+<div class="files-list">{% for sig in signatures %}<div class="file-row"><div class="file-info"><strong>{{'НИТУ МИСИС' if sig.signer_side=='UNIVERSITY' else case.company_name}}</strong><small>{{sig.certificate_subject}} · сертификат {{sig.certificate_serial}} · проверено {{sig.verification_time}}</small><small>SHA-256 документа: {{sig.document_sha256}}</small></div><a class="btn btn-secondary btn-small" href="/agreements/{{case.id}}/ukep/signatures/{{sig.id}}/download">Подпись .sig</a></div>{% endfor %}</div>
+{% else %}<p class="quiet-empty">Проверенных УКЭП пока нет.</p>{% endif %}
+{% if can_ukep %}
+{% if ukep_configured %}
+<div id="ukep-widget" data-agreement-id="{{case.id}}" data-csrf="{{csrf_token}}">
+<label>Сертификат подписанта <select id="ukep-cert" aria-label="Сертификат УКЭП"></select></label>
+<p id="ukep-status" role="status">Проверяем компонент КриптоПро…</p>
+<button id="ukep-sign" class="btn btn-primary" type="button" disabled>Подписать договор УКЭП</button>
+</div>
+<script src="/static/vendor/cadesplugin_api.js"></script>
+<script src="/static/ukep_browser.js"></script>
+{% else %}
+<div class="important-notice">Для подписания необходимо подключить доверенный сервис криптографической проверки УКЭП. До его подключения подписи не принимаются.</div>
+{% endif %}
+{% elif case.status=='SIGNING_PENDING' %}<p>Ожидается подписание уполномоченными представителями сторон.</p>{% endif %}
+</section>
 <section class="panel wide-panel" id="contract-preview">
 <div class="panel-header"><div><h2>Текст договора</h2><p>Документ доступен для просмотра на каждом этапе согласования всем подразделениям, участвующим в обработке договора.</p></div>
 {% if has_card %}<a class="btn btn-secondary btn-small" href="/agreements/{{case.id}}/generate-pdf">Скачать PDF</a>{% endif %}</div>
