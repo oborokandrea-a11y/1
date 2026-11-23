@@ -174,14 +174,14 @@ def add_demo_seals_at_mp(doc):
     count=0
     def put(paragraph):
         nonlocal count
-        if not re.search(r"М\\s*\\.\\s*П\\s*\\.",paragraph.text,re.I):
+        if not re.search(r"М\s*\.\s*П\s*\.",paragraph.text,re.I):
             return
         if count>=12:return
         # An inline drawing in its own run is inserted immediately after the
         # run containing М.П., rather than appended at the paragraph end.
         runs=list(paragraph.runs)
         full="".join(run.text for run in runs)
-        match=re.search(r"М\\s*\\.\\s*П\\s*\\.",full,re.I)
+        match=re.search(r"М\s*\.\s*П\s*\.",full,re.I)
         if not match:return
         offset=0
         target=None
