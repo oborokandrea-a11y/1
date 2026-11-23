@@ -568,7 +568,7 @@ def activate(request:Request,token:str,db:Session=Depends(get_db)):
     invite=db.scalar(select(PartnerInvite).where(PartnerInvite.token_sha256==digest))
     if not invite or invite.redeemed_at or invite.expires_at<datetime.utcnow():
         return render(request,db,"activation.html",title="Приглашение недействительно",valid=False)
-    return render(request,db,"activation.html",title="Подключение предприятия",valid=True,company=invite.organization_name,token=token)
+    return render(request,db,"activation.html",title="Подключение предприятия",valid=True,company=invite.organization_name,token=token,existing_user=current_user(request,db))
 
 @app.post("/activate/{token}")
 async def activate_post(request:Request,token:str,db:Session=Depends(get_db)):
