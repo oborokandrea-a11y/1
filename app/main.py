@@ -86,10 +86,25 @@ async def not_found_handler(request,exc):
     return templates.TemplateResponse(request,"error.html",{"title":"Страница не найдена","message":"Проверьте адрес или вернитесь к списку документов.","user":None,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,"csrf_token":csrf_token(request),"flash":None},status_code=404)
 
 
+EVENT_LABELS={
+"status_changed":"Изменён этап согласования",
+"company_card_created":"Карточка предприятия заполнена",
+"company_card_edited":"Карточка предприятия обновлена",
+"file_uploaded":"Загружен документ",
+"note_added":"Добавлен комментарий",
+"partner_invited":"Приглашено предприятие",
+"partner_activated":"Предприятие подключено",
+"existing_partner_attached":"Договор закреплён за предприятием",
+"ukep_verified":"Электронная подпись проверена",
+"both_qualified_signatures_verified":"Договор подписан обеими сторонами",
+"agreement_created":"Договор зарегистрирован",
+"task_created":"Создано поручение",
+"task_status_changed":"Изменён статус поручения",
+}
 def ctx(request,db,user=None,active="",**kwargs):
     if user is None: user=current_user(request,db)
     flash=request.session.pop("flash",None)
-    return {"user":user,"active":active,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,
+    return {"user":user,"active":active,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,"event_labels":EVENT_LABELS,
             "csrf_token":csrf_token(request),"demo_mode":settings.DEMO_MODE,"flash":flash,
             "today":datetime.utcnow(),**kwargs}
 
