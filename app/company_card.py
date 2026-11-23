@@ -23,7 +23,7 @@ FIELDS = ("student_name","group_name","course_name","department","program","comp
 "room_department","room_address","university_contact","university_phone","university_email")
 
 def safe(v, limit=450):
-    return re.sub(r"[\\x00-\\x1f]+", " ", str(v or "")).strip()[:limit]
+    return re.sub(r"[\x00-\x1f]+", " ", str(v or "")).strip()[:limit]
 
 def context(request, user, **kw):
     return dict(user=user,active="agreements",role_labels=ROLE_LABELS,status_labels=STATUS_LABELS,
