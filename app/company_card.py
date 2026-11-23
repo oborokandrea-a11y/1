@@ -463,28 +463,44 @@ def overlay_demo_marks_pdf(pdf_bytes,case):
     logger=logging.getLogger("cifra.demo_seals")
     diagnostics=[]
     for page_index,page in enumerate(pdf):
-        # Prefer the exact printed М.П. marker; tolerate split letters and
-        # alternative spelling used in the university template.
+        page_number=page_index+1
+        # The approved six-page template has signing fields on pages 4-6.
+        # Never place a demo stamp on page 2 or on narrative paragraphs.
+        if page_number not in (4,5,6):
+            diagnostics.append(f"{page_number}:skipped")
+            continue
         positions=[]
-        for term in ("М.П.", "М. П.", "М П", "М.П", "М. П", "Место печати"):
+        for term in ("М.П.", "М. П.", "М П", "Место печати"):
             positions.extend(page.search_for(term))
+        # In appendices the signature fields sometimes have no literal М.П.
+        # Only inspect the bottom signing area, not the entire page.
         if not positions:
-            # Signature lines are used only when the template has no MP text.
-            for term in ("(подпись)", "подпись", "Подпись"):
-                positions=page.search_for(term)
-                if positions:break
+            for term in ("(подпись)", "подпись"):
+                positions.extend(hit for hit in page.search_for(term)
+                                 if hit.y0 > page.rect.height*0.62)
+        # When no text is searchable, use the existing lower signature area
+        # only for the two appendices, with one mark per side.
+        if not positions and page_number in (5,6):
+            y=page.rect.height*0.83
+            positions=[fitz.Rect(page.rect.width*0.24,y,page.rect.width*0.24+1,y+1),
+                       fitz.Rect(page.rect.width*0.73,y,page.rect.width*0.73+1,y+1)]
         seen=set()
-        for hit in positions:
-            key=(round(hit.x0/5),round(hit.y0/5))
-            if key in seen:continue
-            seen.add(key)
-            size=58
+        # At most one mark in each left/right signature block per page.
+        used_sides=set()
+        for hit in sorted(positions,key=lambda h:(h.y0,h.x0),reverse=True):
+            side="left" if (hit.x0+hit.x1)/2<page.rect.width/2 else "right"
+            if side in used_sides:continue
+            used_sides.add(side)
             cx=(hit.x0+hit.x1)/2
             cy=(hit.y0+hit.y1)/2
+            size=58
             area=fitz.Rect(cx-size/2,cy-size/2,cx+size/2,cy+size/2)
+            area=area & page.rect
+            if area.is_empty:continue
             page.insert_image(area,stream=stamp.getvalue(),overlay=True,keep_proportion=True)
             placed+=1
-        diagnostics.append(f"{page_index+1}:{len(seen)}")
+            seen.add(side)
+        diagnostics.append(f"{page_number}:{len(seen)}")
     logger.warning("Demo PDF agreement=%s status=%s pages=%s stamp_count=%s per_page=%s",
                    case.id,case.status,len(pdf),placed,",".join(diagnostics))
     if placed==0:
