@@ -167,3 +167,9 @@ class CompanyCard(Base):
     university_phone: Mapped[str] = mapped_column(String(60), default="")
     university_email: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+
+class AgreementNumberSequence(Base):
+    __tablename__ = "agreement_number_sequences"
+    year: Mapped[int] = mapped_column(Integer, primary_key=True)
+    last_number: Mapped[int] = mapped_column(Integer, nullable=False)
