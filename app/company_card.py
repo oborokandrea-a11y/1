@@ -199,6 +199,9 @@ def build_docx(case,card):
         # Inflection cannot be reliably inferred for all Russian names.
         # Keep the original spelling rather than silently invent a legal signatory.
         return full_name if full_name and full_name!="Не указано" else "________________"
+    demo_completed=bool(case.is_demo and case.status=="COMPLETED")
+    demo_director=("Смирнов Алексей Викторович" if (card.student_name or "").startswith("Орлов") else "Беляев Дмитрий Павлович") if demo_completed else None
+    director_for_document=demo_director or card.director_name
     values={
         "contract_number":case.reference,
         "contract_date":(case.created_at.strftime("%d.%m.%Y") if case.created_at else datetime.utcnow().strftime("%d.%m.%Y")),
@@ -212,9 +215,9 @@ def build_docx(case,card):
         "company_ogrn":card.company_ogrn or "________________",
         "company_okpo":card.company_okpo or "________________",
         "company_okved":card.company_okved or "________________",
-        "director_name":card.director_name if card.director_name and card.director_name!="Не указано" else "________________",
-        "director_name_genitive":director_genitive(card.director_name),
-        "director_initials":director_initials(card.director_name),
+        "director_name":director_for_document if director_for_document and director_for_document!="Не указано" else "________________",
+        "director_name_genitive":director_genitive(director_for_document),
+        "director_initials":director_initials(director_for_document),
         "practice_start":fmt_date(case.practice_start),
         "practice_end":fmt_date(case.practice_end),
         "academic_year":str(datetime.utcnow().year)+"/"+str(datetime.utcnow().year+1),
@@ -291,7 +294,13 @@ def build_docx(case,card):
     # legal sections, tables and appendices from the approved template.
     if case.is_demo:
         from docx.shared import RGBColor
-        notice=doc.add_paragraph("ТЕСТОВЫЙ ЭКЗЕМПЛЯР. НЕ ПОДПИСАН. ДАННЫЕ ДЕМОНСТРАЦИОННЫЕ.")
+        if demo_completed:
+            doc.add_heading("Демонстрационный блок подписания",level=2)
+            doc.add_paragraph("Вымышленный представитель предприятия: "+demo_director)
+            doc.add_paragraph("Подпись: [ДЕМОНСТРАЦИОННЫЙ МАКЕТ — НЕ ПОДПИСЬ]")
+            doc.add_paragraph("Печать: [ОБРАЗЕЦ · НЕ ДЕЙСТВИТЕЛЬНО]")
+            doc.add_paragraph("Согласование завершено только в тестовом сценарии. Реальных УКЭП и печатей нет.")
+        notice=doc.add_paragraph("ТЕСТОВЫЙ ЭКЗЕМПЛЯР. НЕ ИМЕЕТ ЮРИДИЧЕСКОЙ СИЛЫ. ДАННЫЕ ДЕМОНСТРАЦИОННЫЕ.")
         notice.style=doc.styles["Normal"]
         for run in notice.runs:
             run.bold=True
