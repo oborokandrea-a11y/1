@@ -23,6 +23,19 @@ FIELDS = ("student_name","group_name","course_name","department","program","comp
 "director_name","director_basis","contact_name","contact_phone","contact_email",
 "room_department","room_address","university_contact","university_phone","university_email")
 
+def validate_card_fields(data):
+    required=[field for field in FIELDS if field!="registration_country"]
+    if data.get("residency")=="Нерезидент":
+        required.append("registration_country")
+    for field in required:
+        if not data.get(field):
+            raise HTTPException(422,"Не заполнено обязательное поле: "+field)
+    for field in ("contact_email","university_email"):
+        value=data.get(field,"")
+        if "@" not in value or "." not in value.rsplit("@",1)[-1]:
+            raise HTTPException(422,"Некорректная электронная почта: "+field)
+
+
 def safe(v, limit=450):
     return re.sub(r"[\x00-\x1f]+", " ", str(v or "")).strip()[:limit]
 
@@ -46,10 +59,7 @@ async def submit(request:Request,db:Session=Depends(get_db)):
     if existing:raise HTTPException(409,"Карточка уже создана; повторное создание недоступно")
     f=await request.form();require_csrf(request,f)
     data={key:safe(f.get(key)) for key in FIELDS}
-    for key in ("student_name","group_name","department","program","company_full_name","company_address",
-                "company_inn","director_position","director_name","director_basis","contact_name",
-                "contact_phone","room_address"):
-        if not data[key]:raise HTTPException(422,"Не заполнено обязательное поле: "+key)
+    validate_card_fields(data)
     inn=data["company_inn"]
     if not inn.isdigit() or len(inn) not in (10,12):
         raise HTTPException(422,"ИНН должен состоять из 10 или 12 цифр")
@@ -103,11 +113,7 @@ async def edit_card_post(request:Request,agreement_id:int,db:Session=Depends(get
     f=await request.form()
     require_csrf(request,f)
     data={key:safe(f.get(key)) for key in FIELDS}
-    required=("student_name","group_name","department","program","company_full_name","company_address",
-              "company_inn","director_position","director_name","director_basis",
-              "contact_name","contact_phone","room_address")
-    for key in required:
-        if not data[key]:raise HTTPException(422,"Не заполнено обязательное поле: "+key)
+    validate_card_fields(data)
     if not data["company_inn"].isdigit() or len(data["company_inn"]) not in (10,12):
         raise HTTPException(422,"ИНН должен состоять из 10 или 12 цифр")
     start=safe(f.get("practice_start"),10)
