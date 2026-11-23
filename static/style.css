@@ -85,3 +85,14 @@ a{color:#075ed5}a:hover{color:#074ba7}
 .status-pill{border-radius:9px}
 @media(max-width:1000px){.hero-graphic{right:2%;opacity:.55;transform:scale(.8) rotate(-7deg)}.dashboard-hero-copy{max-width:70%}}
 @media(max-width:650px){.dashboard-hero{padding:26px 22px;min-height:260px}.dashboard-hero-copy{max-width:100%}.hero-graphic{opacity:.12;right:-70px}.global-search{height:40px}.dashboard-hero h1{font-size:34px}}
+
+/* Higher contrast dark sidebar for legibility */
+.inside-layout .sidebar{background:linear-gradient(180deg,#172b4d 0%,#0b1931 100%);border-right:1px solid #0c1a32;color:#eaf2ff}
+.inside-layout .sidebar .brand,.inside-layout .sidebar .brand:hover{color:#fff}
+.inside-layout .sidebar .brand small{color:#bfd0ed}
+.inside-layout .sidebar .nav-label{color:#9db7dd}
+.inside-layout .sidebar .sidenav a{color:#e6efff;background:transparent}
+.inside-layout .sidebar .sidenav a:hover{background:#274875;color:#fff}
+.inside-layout .sidebar .sidenav a.selected{background:#1672f4;color:#fff;box-shadow:0 6px 16px rgba(0,85,205,.3)}
+.inside-layout .sidebar .sidebar-bottom{color:#d4e4ff}
+.inside-layout .sidebar .sidebar-bottom small{color:#9fb6d7}
