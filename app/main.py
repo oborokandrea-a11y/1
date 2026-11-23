@@ -162,6 +162,10 @@ async def logout(request:Request):
 def dashboard(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
     cases=db.scalars(scoped_agreements(db,user).order_by(desc(Agreement.updated_at)).limit(7)).all()
+    if user.role=="STUDENT":
+        return render(request,db,"student_home.html",user,active="dashboard",cases=cases)
+    if user.role=="ENTERPRISE":
+        return render(request,db,"enterprise_home.html",user,active="dashboard",cases=cases)
     total=db.scalar(select(func.count()).select_from(scoped_agreements(db,user).subquery())) or 0
     done=db.scalar(select(func.count()).select_from(scoped_agreements(db,user).where(Agreement.status=="COMPLETED").subquery())) or 0
     active=total-done
@@ -182,6 +186,7 @@ def dashboard(request:Request,db:Session=Depends(get_db)):
 @app.get("/agreements",response_class=HTMLResponse)
 def agreements(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
+    if user.role=="STUDENT":return go("/dashboard")
     status=request.query_params.get("status","")
     q=scoped_agreements(db,user)
     if status in STATUS_LABELS:q=q.where(Agreement.status==status)
@@ -193,14 +198,14 @@ def agreements(request:Request,db:Session=Depends(get_db)):
 @app.get("/agreements/new",response_class=HTMLResponse)
 def new_agreement(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
-    if user.role not in {"STUDENT","STAFF","COORDINATOR","OFFICE"}:
+    if user.role not in {"STAFF","COORDINATOR","OFFICE"}:
         raise HTTPException(403,"Нельзя создать документ")
     students=db.scalars(select(User).where(User.role=="STUDENT",User.is_active.is_(True)).order_by(User.full_name)).all() if user.role in STAFF_ROLES else []
     return render(request,db,"agreement_new.html",user,active="agreements",students=students)
 
 @app.post("/agreements/new")
 async def new_agreement_post(request:Request,db:Session=Depends(get_db)):
-    user=require_user(request,db);require_role(user,{"STUDENT","STAFF","COORDINATOR","OFFICE"})
+    user=require_user(request,db);require_role(user,{"STAFF","COORDINATOR","OFFICE"})
     f=await request.form();require_csrf(request,f)
     title=str(f.get("title","")).strip()[:230]
     company=str(f.get("company_name","")).strip()[:210]
@@ -302,6 +307,7 @@ async def new_note(request:Request,agreement_id:int,db:Session=Depends(get_db)):
 @app.get("/tasks",response_class=HTMLResponse)
 def tasks(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
+    if user.role=="STUDENT":raise HTTPException(403,"Задачи доступны через карточку своего договора")
     all_tasks=list_tasks(db,user)
     users=db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.full_name)).all() if user.role in STAFF_ROLES else []
     cases=db.scalars(scoped_agreements(db,user).order_by(desc(Agreement.id)).limit(120)).all() if user.role in STAFF_ROLES else []
@@ -321,10 +327,10 @@ async def task_create(request:Request,db:Session=Depends(get_db)):
     case_id=None
     try:case_id=int(f.get("agreement_id") or 0) or None
     except ValueError:pass
-    if recipient.role=="ENTERPRISE":
+    if recipient.role in {"ENTERPRISE","STUDENT"}:
         case=db.get(Agreement,case_id) if case_id else None
-        if not case or case.enterprise_user_id!=recipient.id:
-            notify(request,"Предприятию можно назначать задачи только по его договору","error");return go("/tasks")
+        if not case or (case.enterprise_user_id if recipient.role=="ENTERPRISE" else case.student_id)!=recipient.id:
+            notify(request,"Задачи назначаются только по договору этого пользователя","error");return go("/tasks")
     pr=str(f.get("priority","normal"))
     if pr not in {"low","normal","high"}:pr="normal"
     d=as_date(str(f.get("due_at","")))
@@ -471,11 +477,13 @@ async def activate_post(request:Request,token:str,db:Session=Depends(get_db)):
 @app.get("/modules",response_class=HTMLResponse)
 def modules(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
+    require_role(user,STAFF_ROLES)
     return render(request,db,"modules.html",user,active="modules")
 
 @app.get("/guide",response_class=HTMLResponse)
 def guide(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
+    require_role(user,STAFF_ROLES)
     return render(request,db,"guide.html",user,active="guide")
 
 @app.get("/profile",response_class=HTMLResponse)
