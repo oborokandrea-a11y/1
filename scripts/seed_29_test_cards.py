@@ -153,12 +153,15 @@ with SessionLocal() as db:
                     db.add(student);db.flush()
                 company,address=COMPANIES[i-1]
                 if existing:
-                    if existing.is_demo and existing.status=="DRAFT":
+                    if existing.is_demo and i in (1,2):
+                        existing.status="COMPLETED"
+                        existing.submitted_at=existing.submitted_at or datetime.utcnow()
+                    elif existing.is_demo and existing.status=="DRAFT":
                         existing.status="STAFF_REVIEW"
                         existing.submitted_at=existing.submitted_at or datetime.utcnow()
                     existing.reference=reference
                     existing.company_name=company
-                    existing.description='ТЕСТОВАЯ ЗАПИСЬ: вымышленный студент, организация из реестра практики 2026. Статус этапа смоделирован для проверки интерфейса; реального согласования и подписей нет.'
+                    existing.description=("ТЕСТОВЫЙ СЦЕНАРИЙ ЗАВЕРШЁН. Демонстрационный договор, не имеет юридической силы; УКЭП и реальные согласования отсутствуют." if i in (1,2) else "ТЕСТОВАЯ ЗАПИСЬ: вымышленный студент, организация из реестра практики 2026. Статус этапа смоделирован; реальных подписей нет.")
                     card=db.scalar(select(CompanyCard).where(CompanyCard.agreement_id==existing.id))
                     if card:
                         card.company_full_name=company
@@ -169,7 +172,7 @@ with SessionLocal() as db:
                 agreement=Agreement(reference=reference,title=f"Практическая подготовка — {student_name}",
                     practice_type="Производственная",student_id=student.id,company_name=company,
                     enterprise_user_id=enterprise_demo.id,practice_start="2026-07-01",
-                    practice_end="2026-07-28",status=STAGES[(i-1)%len(STAGES)],submitted_at=datetime.utcnow(),is_demo=True,
+                    practice_end="2026-07-28",status=("COMPLETED" if i in (1,2) else STAGES[(i-1)%len(STAGES)]),submitted_at=datetime.utcnow(),is_demo=True,
                     description="ТЕСТОВАЯ ЗАПИСЬ. Вымышленный студент; организация из реестра практики 2026. Статус этапа смоделирован; не является заключённым договором.")
                 db.add(agreement);db.flush()
                 db.add(CompanyCard(agreement_id=agreement.id,student_name=student_name,
