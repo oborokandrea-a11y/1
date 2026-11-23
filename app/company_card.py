@@ -185,6 +185,14 @@ def build_docx(case,card):
     def fmt_date(value):
         try:return datetime.strptime(value,"%Y-%m-%d").strftime("%d.%m.%Y")
         except (ValueError,TypeError):return "________________"
+    def director_initials(full_name):
+        parts=str(full_name or "").split()
+        if len(parts)<2 or full_name=="Не указано":return "________________"
+        return parts[0]+" "+"".join(part[0]+"." for part in parts[1:])
+    def director_genitive(full_name):
+        # Inflection cannot be reliably inferred for all Russian names.
+        # Keep the original spelling rather than silently invent a legal signatory.
+        return full_name if full_name and full_name!="Не указано" else "________________"
     values={
         "contract_number":case.reference,
         "contract_date":"________________",
@@ -193,14 +201,14 @@ def build_docx(case,card):
         "company_address":card.company_address,
         "company_address_short":card.company_address,
         "company_phone":card.company_phone or "________________",
-        "company_inn":card.company_inn,
+        "company_inn":card.company_inn or "________________",
         "company_kpp":card.company_kpp or "________________",
         "company_ogrn":card.company_ogrn or "________________",
         "company_okpo":card.company_okpo or "________________",
         "company_okved":card.company_okved or "________________",
-        "director_name":card.director_name,
-        "director_name_genitive":"________________",
-        "director_initials":"________________",
+        "director_name":card.director_name if card.director_name and card.director_name!="Не указано" else "________________",
+        "director_name_genitive":director_genitive(card.director_name),
+        "director_initials":director_initials(card.director_name),
         "practice_start":fmt_date(case.practice_start),
         "practice_end":fmt_date(case.practice_end),
         "academic_year":str(datetime.utcnow().year)+"/"+str(datetime.utcnow().year+1),
@@ -215,23 +223,55 @@ def build_docx(case,card):
         "university_email":card.university_email or "________________",
     }
     def replace_runs(paragraph):
-        # Replacements preserve existing DOCX styles when placeholders are
-        # contained in a run. Cross-run placeholders are reconstructed.
-        for run in paragraph.runs:
-            for key,value in values.items():
-                run.text=run.text.replace("{{"+key+"}}",value)
-        original="".join(r.text for r in paragraph.runs)
-        if "{{" not in original:return
-        updated=original
-        for key,value in values.items():updated=updated.replace("{{"+key+"}}",value)
-        if updated!=original and paragraph.runs:
-            paragraph.runs[0].text=updated
-            for run in paragraph.runs[1:]:run.text=""
+        # Replace across run boundaries without flattening all formatting into
+        # the first run. The source document's typography remains intact.
+        runs=list(paragraph.runs)
+        if not runs:return
+        for key,value in values.items():
+            token="{{"+key+"}}"
+            while True:
+                full="".join(run.text for run in runs)
+                pos=full.find(token)
+                if pos<0:break
+                end=pos+len(token)
+                offset=0
+                first=last=None
+                first_pos=last_pos=0
+                for idx,run in enumerate(runs):
+                    next_offset=offset+len(run.text)
+                    if first is None and pos<next_offset:
+                        first=idx;first_pos=pos-offset
+                    if first is not None and end<=next_offset:
+                        last=idx;last_pos=end-offset;break
+                    offset=next_offset
+                if first is None or last is None:break
+                if first==last:
+                    t=runs[first].text
+                    runs[first].text=t[:first_pos]+str(value)+t[last_pos:]
+                else:
+                    before=runs[first].text[:first_pos]
+                    after=runs[last].text[last_pos:]
+                    runs[first].text=before+str(value)
+                    for idx in range(first+1,last):runs[idx].text=""
+                    runs[last].text=after
     for paragraph in doc.paragraphs:replace_runs(paragraph)
+    visited=set()
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
+                if id(cell._tc) in visited:continue
+                visited.add(id(cell._tc))
                 for paragraph in cell.paragraphs:replace_runs(paragraph)
+    # Mark generated demo documents as non-signable while retaining all
+    # legal sections, tables and appendices from the approved template.
+    if case.is_demo:
+        from docx.shared import RGBColor
+        notice=doc.add_paragraph("ТЕСТОВЫЙ ЭКЗЕМПЛЯР. НЕ ПОДПИСАН. ДАННЫЕ ДЕМОНСТРАЦИОННЫЕ.")
+        notice.style=doc.styles["Normal"]
+        for run in notice.runs:
+            run.bold=True
+            run.font.size=Pt(9)
+            run.font.color.rgb=RGBColor(150,0,0)
     buffer=io.BytesIO()
     doc.save(buffer);buffer.seek(0)
     return buffer
