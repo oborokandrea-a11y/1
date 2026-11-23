@@ -593,6 +593,30 @@ async def activate_post(request:Request,token:str,db:Session=Depends(get_db)):
     db.commit();notify(request,"Кабинет предприятия активирован. Войдите с созданными реквизитами.")
     return go("/login")
 
+@app.post("/activate/{token}/existing")
+async def activate_existing_enterprise(request:Request,token:str,db:Session=Depends(get_db)):
+    """Attach an additional agreement to an already authenticated company account."""
+    user=require_user(request,db)
+    require_role(user,{"ENTERPRISE"})
+    form=await request.form()
+    require_csrf(request,form)
+    digest=hashlib.sha256(token.encode()).hexdigest()
+    invite=db.scalar(select(PartnerInvite).where(PartnerInvite.token_sha256==digest))
+    if not invite or invite.redeemed_at or invite.expires_at<datetime.utcnow():
+        raise HTTPException(403,"Приглашение недействительно")
+    case=db.get(Agreement,invite.agreement_id)
+    if not case or case.enterprise_user_id or case.company_name!=invite.organization_name:
+        raise HTTPException(409,"Договор уже закреплён или организация изменена")
+    if user.organization_name.strip().casefold()!=invite.organization_name.strip().casefold():
+        raise HTTPException(403,"Ваш кабинет зарегистрирован на другое предприятие")
+    case.enterprise_user_id=user.id
+    invite.redeemed_at=datetime.utcnow()
+    log_event(db,user,"existing_partner_attached","agreement",case.id,
+              "Договор закреплён за ранее созданным кабинетом предприятия")
+    db.commit()
+    notify(request,"Договор добавлен в ваш кабинет")
+    return go(f"/agreements/{case.id}")
+
 @app.get("/modules",response_class=HTMLResponse)
 def modules(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
