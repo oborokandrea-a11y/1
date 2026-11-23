@@ -61,26 +61,44 @@ def startup():
     seed_demo_tasks()
 
 def seed_demo_tasks():
-    """Create idempotent, explicitly training-only assignments for demo accounts."""
+    """Idempotent training assignments for demo users and practice-office staff."""
     from .database import SessionLocal
     with SessionLocal() as db:
         users=db.scalars(select(User).where(User.is_active.is_(True))).all()
+        demo_cases=db.scalars(select(Agreement).where(Agreement.is_demo.is_(True)).order_by(Agreement.id).limit(12)).all()
         for user in users:
-            # Do not invent work obligations for real users.
-            if not (str(user.username or "").lower().startswith(("demo","test"))):
+            is_demo=str(user.username or "").lower().startswith(("demo","test"))
+            is_practice_office=(user.role=="OFFICE" or "отдел практик" in str(user.full_name or "").lower())
+            if not (is_demo or is_practice_office):
                 continue
-            existing=db.scalar(select(func.count(Task.id)).where(Task.assigned_to_id==user.id))
-            if existing:
-                continue
-            labels=[
-                ("[Учебное] Проверить реквизиты договора","Проверить стороны, контактные данные, адреса и приложения."),
-                ("[Учебное] Согласовать договор","Проверить документ и направить замечания либо согласовать."),
-                ("[Учебное] Подготовить электронное подписание","Проверить окончательный PDF и доступность сертификата УКЭП.")
-            ]
-            for index,(title,details) in enumerate(labels):
-                db.add(Task(title=title,details=details,created_by_id=user.id,
-                            assigned_to_id=user.id,due_at=datetime(2026,11,25)+timedelta(days=index),
-                            priority="high" if index==2 else "normal",status="TODO"))
+            if is_practice_office and demo_cases:
+                labels=[
+                    ("[Учебное] Проверить реквизиты и приложения","Проверить сведения о профильной организации, помещениях и приложениях № 1 и № 2."),
+                    ("[Учебное] Согласовать договор практики","Проверить содержание и направить на следующий этап согласования."),
+                    ("[Учебное] Подготовить договор к электронной подписи","Проверить итоговый PDF и наличие мест подписания обеих сторон.")
+                ]
+                for index,case in enumerate(demo_cases):
+                    title,details=labels[index%len(labels)]
+                    unique_title=title+" № "+str(case.id)
+                    exists=db.scalar(select(Task.id).where(Task.assigned_to_id==user.id,
+                                    Task.agreement_id==case.id,Task.title==unique_title))
+                    if exists:continue
+                    db.add(Task(title=unique_title,details=details,created_by_id=user.id,
+                                assigned_to_id=user.id,agreement_id=case.id,
+                                due_at=datetime(2026,11,25)+timedelta(days=index%6),
+                                priority="high" if index%3==2 else "normal",status="TODO"))
+            elif is_demo:
+                existing=db.scalar(select(func.count(Task.id)).where(Task.assigned_to_id==user.id))
+                if existing:continue
+                labels=[
+                    ("[Учебное] Проверить реквизиты договора","Проверить стороны, контактные данные, адреса и приложения."),
+                    ("[Учебное] Согласовать договор","Проверить документ и направить замечания либо согласовать."),
+                    ("[Учебное] Подготовить электронное подписание","Проверить окончательный PDF и доступность сертификата УКЭП.")
+                ]
+                for index,(title,details) in enumerate(labels):
+                    db.add(Task(title=title,details=details,created_by_id=user.id,
+                                assigned_to_id=user.id,due_at=datetime(2026,11,25)+timedelta(days=index),
+                                priority="high" if index==2 else "normal",status="TODO"))
         db.commit()
 
 @app.middleware("http")
