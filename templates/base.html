@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#13243b">
-<title>{% block title %}Цифра — единое пространство документов{% endblock %}</title>
+<title>{% block title %}Цифра | Договоры практики НИТУ МИСИС{% endblock %}</title>
 <link rel="stylesheet" href="/static/style.css?v=2"><script src="/static/app.js" defer></script>
 </head><body class="{{ 'public-layout' if not user else 'inside-layout' }}">
 {% if user %}
 <div class="app-shell">
- <aside class="sidebar" id="sidebar"><a class="brand brand-sidebar" href="/dashboard"><span class="brand-logo">Ц</span><span>Цифра<small>ДОКУМЕНТООБОРОТ</small></span></a>
+ <aside class="sidebar" id="sidebar"><a class="brand brand-sidebar" href="/dashboard"><span class="brand-logo">Ц</span><span>Цифра<small>ДОГОВОРЫ ПРАКТИКИ</small></span></a>
  <div class="nav-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
  {% if user.role == 'STUDENT' %}
  <nav class="sidenav"><a href="/dashboard" class="{{ 'selected' if active=='dashboard' else '' }}">Моя практика</a><a href="/company-card/new">Заполнить карточку предприятия</a></nav>
@@ -25,7 +25,7 @@
  <footer class="app-footer">© Цифра · Система электронного документооборота · Согласование не является электронной подписью</footer></div>
  </div>
 {% else %}
-<header class="public-header"><a href="/" class="brand"><span class="brand-logo">Ц</span><span>Цифра<small>ЕДИНАЯ СИСТЕМА СОГЛАСОВАНИЯ</small></span></a><nav><a href="/#features">Возможности</a><a href="/#process">Процесс</a><a href="/login" class="btn btn-primary btn-small">Войти в кабинет ↗</a></nav></header>
+<header class="public-header"><a href="/" class="brand"><span class="brand-logo">Ц</span><span>Цифра<small>ДОКУМЕНТЫ И СОГЛАСОВАНИЕ</small></span></a><nav><a href="/#features">Возможности</a><a href="/#process">Процесс</a><a href="/login" class="btn btn-primary btn-small">Войти в кабинет ↗</a></nav></header>
 {% if flash %}<div class="public-alert alert {{'alert-danger' if flash.kind=='error' else 'alert-ok'}}">{{flash.message}}</div>{% endif %}
 {% block public_content %}{% endblock %}
 <footer class="public-footer">© Цифра · Система электронного документооборота</footer>
