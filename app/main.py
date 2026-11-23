@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
 from .settings import settings, ROOT
-from .models import User, Agreement, Attachment, Task, AuditEvent, PartnerInvite, AgreementNote, BaselineObservation, LoginAttempt
+from .models import User, Agreement, Attachment, Task, AuditEvent, PartnerInvite, AgreementNote, BaselineObservation, LoginAttempt, CompanyCard
 from .security import (ROLE_LABELS, STAFF_ROLES, MANAGE_ROLES, hash_password, verify_password,
                        current_user, require_user, require_role, can_view_agreement, can_upload_agreement,
                        csrf_token, require_csrf, validate_password)
@@ -256,7 +256,10 @@ def agreement_detail(request:Request,agreement_id:int,db:Session=Depends(get_db)
             e.actor_name=(db.get(User,e.actor_id).full_name if e.actor_id and db.get(User,e.actor_id) else "Система")
     display_steps=(STATUS_STEPS if obj.signing_order=="university_first" else ["DRAFT","STAFF_REVIEW","COORDINATOR_REVIEW","PARTNER_REVIEW","OFFICE_REVIEW","COMPLETED"])
     step_index=display_steps.index(obj.status) if obj.status in display_steps else 0
-    return render(request,db,"agreement_detail.html",user,active="agreements",case=obj,files=files,events=events,notes=notes,tasks=tasks,
+    has_card=db.scalar(select(CompanyCard.id).where(CompanyCard.agreement_id==obj.id).limit(1)) is not None
+    pdf_files=[f for f in files if f.filename.lower().endswith(".pdf")]
+    preview_url=(f"/agreements/{obj.id}/preview-pdf" if has_card else (f"/files/{pdf_files[0].id}/preview" if pdf_files else None))
+    return render(request,db,"agreement_detail.html",user,active="agreements",case=obj,files=files,events=events,notes=notes,tasks=tasks,preview_url=preview_url,has_card=has_card,
                   allowed_actions=possible_actions(user,obj),actions_labels=ACTIONS_LABELS,
                   allow_upload=can_upload_agreement(user,obj),can_invite=(user.role in STAFF_ROLES and obj.enterprise_user_id is None and obj.status!="COMPLETED"),
                   step_names=display_steps,step_index=step_index)
@@ -295,6 +298,18 @@ async def agreement_upload(request:Request,agreement_id:int,db:Session=Depends(g
     log_event(db,user,"file_uploaded","agreement",obj.id,f"Версия {version}: {attachment.filename} · SHA-256 {attachment.sha256[:16]}…")
     db.commit();notify(request,"Файл загружен в защищённое хранилище; версия и контрольная сумма сохранены.")
     return go(f"/agreements/{agreement_id}")
+
+@app.get("/files/{attachment_id}/preview")
+def preview_attachment(request:Request,attachment_id:int,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    attachment=db.get(Attachment,attachment_id)
+    if not attachment:raise HTTPException(404,"Документ не найден")
+    read_case(db,user,attachment.agreement_id)
+    if not attachment.filename.lower().endswith(".pdf"):
+        raise HTTPException(415,"Встроенный просмотр доступен для PDF")
+    return Response(get_file(attachment.object_key),media_type="application/pdf",
+        headers={"Content-Disposition":"inline","Cache-Control":"private, no-store",
+                 "Content-Security-Policy":"sandbox allow-same-origin"})
 
 @app.get("/files/{attachment_id}/download")
 def download_file(request:Request,attachment_id:int,db:Session=Depends(get_db)):
