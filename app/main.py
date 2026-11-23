@@ -221,8 +221,15 @@ def agreements(request:Request,db:Session=Depends(get_db)):
     q=scoped_agreements(db,user)
     if status in STATUS_LABELS:q=q.where(Agreement.status==status)
     search=request.query_params.get("q","").strip()[:120]
-    if search:q=q.where(or_(Agreement.reference.ilike(f"%{search}%"),Agreement.title.ilike(f"%{search}%"),Agreement.company_name.ilike(f"%{search}%")))
-    cases=db.scalars(q.order_by(desc(Agreement.created_at)).limit(200)).all()
+    if search:
+        student_matches=select(User.id).where(User.full_name.ilike(f"%{search}%"))
+        card_matches=select(CompanyCard.agreement_id).where(CompanyCard.student_name.ilike(f"%{search}%"))
+        q=q.where(or_(Agreement.reference.ilike(f"%{search}%"),
+                     Agreement.title.ilike(f"%{search}%"),
+                     Agreement.company_name.ilike(f"%{search}%"),
+                     Agreement.student_id.in_(student_matches),
+                     Agreement.id.in_(card_matches)))
+    cases=db.scalars(q.order_by(Agreement.is_demo.asc(),desc(Agreement.created_at)).limit(200)).all()
     return render(request,db,"agreements.html",user,active="agreements",cases=cases,filter_status=status,q=search,status_items=STATUS_LABELS.items())
 
 @app.get("/agreements/new",response_class=HTMLResponse)
