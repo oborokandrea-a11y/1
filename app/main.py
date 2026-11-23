@@ -517,11 +517,11 @@ async def download_pilot_credentials(request:Request,db:Session=Depends(get_db))
     writer=csv.writer(output,delimiter=";")
     writer.writerow(["Роль","Предприятие / описание","Логин","Новый пароль","Договоров закреплено","Примечание"])
     demo_roles={
-      "STUDENT":("student-demo","Студент (учебная роль)"),
-      "STAFF":("staff-demo","Сотрудник кафедры (учебная роль)"),
-      "COORDINATOR":("coordinator-demo","Ответственный за практику (учебная роль)"),
-      "OFFICE":("office-demo","Отдел практик (учебная роль)"),
-      "ENTERPRISE":("enterprise-demo","Предприятие (учебная роль)"),
+      "STUDENT":("student-demo","Студент"),
+      "STAFF":("staff-demo","Сотрудник кафедры"),
+      "COORDINATOR":("coordinator-demo","Ответственный за практику"),
+      "OFFICE":("office-demo","Отдел практик"),
+      "ENTERPRISE":("enterprise-demo","Предприятие"),
     }
     for role,(username,label) in demo_roles.items():
         password="P!"+secrets.token_urlsafe(18)+"7a"
@@ -531,7 +531,7 @@ async def download_pilot_credentials(request:Request,db:Session=Depends(get_db))
         if account is None:
             account=User(username=username,full_name=label,role=role,
                          password_hash=hash_password(password),
-                         organization_name="Учебная организация" if role=="ENTERPRISE" else "")
+                         organization_name="Организация" if role=="ENTERPRISE" else "")
             db.add(account)
         else:
             account.password_hash=hash_password(password)
@@ -594,7 +594,7 @@ async def create_partner_invite(request:Request,db:Session=Depends(get_db)):
     # A student cannot issue invitations; an authorized university employee must
     # verify the recipient through the company's independently established contact.
     if case.is_demo:
-        notify(request,"Для учебных записей приглашения не выдаются","error")
+        notify(request,"Для этой записи приглашения не выдаются","error")
         return go("/partners")
     if db.scalar(select(PartnerInvite.id).where(
         PartnerInvite.agreement_id==case.id,
