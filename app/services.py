@@ -1,7 +1,7 @@
 from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy import select
-from .models import Agreement, AuditEvent, Attachment, User
+from .models import Agreement, AuditEvent, Attachment, User, CompanyCard
 from .security import require_role
 
 STATUS_LABELS={
@@ -32,8 +32,9 @@ def advance_agreement(db,user,agreement,action):
     old=agreement.status
     if action=="submit":
         has_attachment=db.scalar(select(Attachment.id).where(Attachment.agreement_id==agreement.id).limit(1))
-        if not has_attachment:
-            raise HTTPException(422,"Сначала загрузите проект договора")
+        has_generated_card=db.scalar(select(CompanyCard.id).where(CompanyCard.agreement_id==agreement.id).limit(1))
+        if not has_attachment and not has_generated_card:
+            raise HTTPException(422,"Сначала загрузите проект договора или заполните карточку предприятия")
         agreement.staff_approved_at=None;agreement.coordinator_approved_at=None
         agreement.office_approved_at=None;agreement.partner_approved_at=None;agreement.completed_at=None
         agreement.submitted_at=dt
