@@ -177,11 +177,11 @@ def add_demo_seals_at_mp(doc):
                 run.text=before
                 buffer.seek(0)
                 image_run=paragraph.add_run()
-                image_run.add_picture(buffer,width=Cm(1.7))
+                image_run.add_picture(buffer,width=Cm(1.25))
                 if after:paragraph.add_run(after)
                 return
         buffer.seek(0)
-        paragraph.add_run().add_picture(buffer,width=Cm(1.7))
+        paragraph.add_run().add_picture(buffer,width=Cm(1.25))
     for paragraph in doc.paragraphs:put(paragraph)
     visited=set()
     def walk(table):
@@ -275,9 +275,10 @@ def build_docx(case,card):
         "group_name":card.group_name,
         "student_name":card.student_name,
         "practice_type_and_payment":case.practice_type+(" (оплачиваемая)" if card.practice_paid else " (без оплаты)"),
-        "university_contact":card.university_contact or "________________",
-        "university_phone":card.university_phone or "________________",
-        "university_email":card.university_email or "________________",
+        "university_contact":card.university_contact or ("Морозова Анна Викторовна" if case.is_demo else "________________"),
+        "university_phone":card.university_phone or ("+7 (000) 123-45-67" if case.is_demo else "________________"),
+        "university_email":card.university_email or ("practice@example.org" if case.is_demo else "________________"),
+        "university_position":("доцент, к.н." if case.is_demo else "________________"),
     }
     def replace_runs(paragraph):
         # Replace across run boundaries without flattening all formatting into
@@ -312,6 +313,18 @@ def build_docx(case,card):
                     for idx in range(first+1,last):runs[idx].text=""
                     runs[last].text=after
     for paragraph in doc.paragraphs:replace_runs(paragraph)
+    if case.is_demo:
+        # Complete the university practice-contact clause in the source template.
+        contact=("Учебное подразделение, доцент, к.н. (должность) "
+                 "Морозова Анна Викторовна (ф.и.о.), "
+                 "+7 (000) 123-45-67 (телефон), practice@example.org (e-mail).")
+        for paragraph in doc.paragraphs:
+            if "Контактная информация ответственного лица" in paragraph.text:
+                # Replace only this contact paragraph; leave section 5.6 intact.
+                for run in paragraph.runs:run.text=""
+                paragraph.add_run("Контактная информация ответственного лица за заключение договора "
+                                  "и организацию практической подготовки со стороны Университета: "+contact)
+
     # Some uploaded templates incorrectly put the student's initials in the
     # agreement-number field instead of using {{contract_number}}.
     # Correct only demo documents, retaining the approved real template.
@@ -347,17 +360,7 @@ def build_docx(case,card):
                     unresolved.extend(re.findall(r"\\{\\{[^{}]+\\}\\}",paragraph.text))
     if unresolved:
         raise HTTPException(422,"В шаблоне остались незаполненные поля: "+", ".join(sorted(set(unresolved))))
-    # Mark generated demo documents as non-signable while retaining all
-    # legal sections, tables and appendices from the approved template.
-    if case.is_demo:
-        from docx.shared import RGBColor
-        demo_date=values["contract_date"]
-        notice=doc.add_paragraph("ТЕСТОВЫЙ ЭКЗЕМПЛЯР. НЕ ИМЕЕТ ЮРИДИЧЕСКОЙ СИЛЫ. ДАННЫЕ ДЕМОНСТРАЦИОННЫЕ.")
-        notice.style=doc.styles["Normal"]
-        for run in notice.runs:
-            run.bold=True
-            run.font.size=Pt(9)
-            run.font.color.rgb=RGBColor(150,0,0)
+    # Demo stamps belong at the existing М.П. fields, never in an appended block.
     if case.is_demo:
         add_demo_seals_at_mp(doc)
     buffer=io.BytesIO()
