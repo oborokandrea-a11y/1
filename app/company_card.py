@@ -195,7 +195,7 @@ def build_docx(case,card):
         return full_name if full_name and full_name!="Не указано" else "________________"
     values={
         "contract_number":case.reference,
-        "contract_date":"________________",
+        "contract_date":(case.created_at.strftime("%d.%m.%Y") if case.created_at else datetime.utcnow().strftime("%d.%m.%Y")),
         "company_full_name":card.company_full_name,
         "company_short_name":card.company_short_name or "________________",
         "company_address":card.company_address,
