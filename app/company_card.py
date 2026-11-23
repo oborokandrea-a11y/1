@@ -153,7 +153,6 @@ def add_demo_seals_at_mp(doc):
     """Place visibly invalid demo seals at existing М.П. markers, not on new pages."""
     from PIL import Image, ImageDraw, ImageFont
     from docx.shared import Cm
-    from docx.enum.text import WD_BREAK
     stamp=Image.new("RGB",(360,360),"white")
     draw=ImageDraw.Draw(stamp)
     blue=(23,76,173)
@@ -170,7 +169,7 @@ def add_demo_seals_at_mp(doc):
     def put(paragraph):
         if not re.search(r"М\\s*\\.\\s*П\\s*\\.",paragraph.text,re.I):
             return
-        # Add the image directly at the existing seal position.
+        # Keep the seal inline beside М.П. to avoid shifting appendix tables or adding pages.
         for run in paragraph.runs:
             match=re.search(r"М\\s*\\.\\s*П\\s*\\.",run.text,re.I)
             if match:
@@ -178,12 +177,11 @@ def add_demo_seals_at_mp(doc):
                 run.text=before
                 buffer.seek(0)
                 image_run=paragraph.add_run()
-                image_run.add_break()
-                image_run.add_picture(buffer,width=Cm(2.7))
+                image_run.add_picture(buffer,width=Cm(1.7))
                 if after:paragraph.add_run(after)
                 return
         buffer.seek(0)
-        paragraph.add_run().add_picture(buffer,width=Cm(2.7))
+        paragraph.add_run().add_picture(buffer,width=Cm(1.7))
     for paragraph in doc.paragraphs:put(paragraph)
     visited=set()
     def walk(table):
