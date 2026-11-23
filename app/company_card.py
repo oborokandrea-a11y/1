@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, update, text
 from docx import Document
 from docx.shared import Pt, Cm
-from .database import get_db
-from .models import User, Agreement, CompanyCard, AgreementNumberSequence
+from .database import get_db, SessionLocal
+from .models import User, Agreement, CompanyCard, AgreementNumberSequence, DocumentTemplate
 from .security import require_user, require_csrf, csrf_token, ROLE_LABELS
 from .services import STATUS_LABELS, log_event
 from .settings import ROOT
@@ -147,10 +147,13 @@ def build_docx(case,card):
     # The approved, unchanged legal text is supplied as a DOCX template.
     # Never substitute an abbreviated contract when the approved template
     # is unavailable: fail closed rather than issue an incorrect document.
-    template_path=ROOT/"templates"/"documents"/"practice_agreement.docx"
-    if not template_path.exists():
-        raise HTTPException(503,"Типовой договор НИТУ МИСИС ещё не установлен. Формирование временно недоступно.")
-    doc=Document(str(template_path))
+    from .storage import get_file
+    with SessionLocal() as template_db:
+        latest=template_db.scalar(select(DocumentTemplate).where(DocumentTemplate.template_kind=="practice_agreement").order_by(DocumentTemplate.id.desc()).limit(1))
+        if not latest:
+            raise HTTPException(503,"Типовой договор НИТУ МИСИС ещё не установлен. Формирование временно недоступно.")
+        template_bytes=get_file(latest.object_key)
+    doc=Document(io.BytesIO(template_bytes))
     from datetime import date
     def fmt_date(value):
         try:return datetime.strptime(value,"%Y-%m-%d").strftime("%d.%m.%Y")
