@@ -144,6 +144,66 @@ def show(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     return views.TemplateResponse(request,"company_card_view.html",context(request,user,case=case,card=card))
 
 def build_docx(case,card):
+    # The approved, unchanged legal text is supplied as a DOCX template.
+    # Never substitute an abbreviated contract when the approved template
+    # is unavailable: fail closed rather than issue an incorrect document.
+    template_path=ROOT/"templates"/"documents"/"practice_agreement.docx"
+    if not template_path.exists():
+        raise HTTPException(503,"Типовой договор НИТУ МИСИС ещё не установлен. Формирование временно недоступно.")
+    doc=Document(str(template_path))
+    from datetime import date
+    def fmt_date(value):
+        try:return datetime.strptime(value,"%Y-%m-%d").strftime("%d.%m.%Y")
+        except (ValueError,TypeError):return "________________"
+    values={
+        "contract_number":case.reference,
+        "contract_date":"________________",
+        "company_full_name":card.company_full_name,
+        "company_short_name":card.company_short_name or "________________",
+        "company_address":card.company_address,
+        "company_address_short":card.company_address,
+        "company_phone":card.company_phone or "________________",
+        "company_inn":card.company_inn,
+        "company_kpp":card.company_kpp or "________________",
+        "company_ogrn":card.company_ogrn or "________________",
+        "company_okpo":card.company_okpo or "________________",
+        "company_okved":card.company_okved or "________________",
+        "director_name":card.director_name,
+        "director_name_genitive":"________________",
+        "director_initials":"________________",
+        "practice_start":fmt_date(case.practice_start),
+        "practice_end":fmt_date(case.practice_end),
+        "academic_year":str(datetime.utcnow().year)+"/"+str(datetime.utcnow().year+1),
+        "department":card.department,
+        "program":card.program,
+        "course_name":card.course_name or "________________",
+        "group_name":card.group_name,
+        "student_name":card.student_name,
+        "practice_type_and_payment":case.practice_type+(" (оплачиваемая)" if card.practice_paid else " (без оплаты)"),
+        "university_contact":card.university_contact or "________________",
+        "university_phone":card.university_phone or "________________",
+        "university_email":card.university_email or "________________",
+    }
+    def replace_runs(paragraph):
+        # Replacements preserve existing DOCX styles when placeholders are
+        # contained in a run. Cross-run placeholders are reconstructed.
+        original="".join(r.text for r in paragraph.runs)
+        if "{{" not in original:return
+        updated=original
+        for key,value in values.items():updated=updated.replace("{{"+key+"}}",value)
+        if updated!=original and paragraph.runs:
+            paragraph.runs[0].text=updated
+            for run in paragraph.runs[1:]:run.text=""
+    for paragraph in doc.paragraphs:replace_runs(paragraph)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:replace_runs(paragraph)
+    buffer=io.BytesIO()
+    doc.save(buffer);buffer.seek(0)
+    return buffer
+
+def build_docx_legacy(case,card):
     doc=Document()
     section=doc.sections[0]
     section.top_margin=Cm(1.8);section.bottom_margin=Cm(1.7)
