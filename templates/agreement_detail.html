@@ -4,7 +4,7 @@
 <section class="panel wide-panel" id="ukep-signatures">
 <div class="panel-header"><div><h2>Усиленные квалифицированные электронные подписи</h2><p>Юридически значимое подписание окончательной версии PDF с проверкой сертификатов и полномочий</p></div></div>
 {% if signatures %}
-<div class="files-list">{% for sig in signatures %}<div class="file-row"><div class="file-info"><strong>{{'НИТУ МИСИС' if sig.signer_side=='UNIVERSITY' else case.company_name}}</strong><small>{{sig.certificate_subject}} · сертификат {{sig.certificate_serial}} · проверено {{sig.verification_time}}</small><small>SHA-256 документа: {{sig.document_sha256}}</small></div><a class="btn btn-secondary btn-small" href="/agreements/{{case.id}}/ukep/signatures/{{sig.id}}/download">Подпись .sig</a></div>{% endfor %}</div>
+<div class="files-list">{% for sig in signatures %}<div class="file-row"><div class="file-info"><strong>{{'Образовательная организация' if sig.signer_side=='UNIVERSITY' else case.company_name}}</strong><small>{{sig.certificate_subject}} · сертификат {{sig.certificate_serial}} · проверено {{sig.verification_time}}</small><small>SHA-256 документа: {{sig.document_sha256}}</small></div><a class="btn btn-secondary btn-small" href="/agreements/{{case.id}}/ukep/signatures/{{sig.id}}/download">Подпись .sig</a></div>{% endfor %}</div>
 {% else %}<p class="quiet-empty">Проверенных УКЭП пока нет.</p>{% endif %}
 {% if can_ukep %}
 {% if ukep_configured %}
