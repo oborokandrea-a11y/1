@@ -47,6 +47,13 @@ templates=Jinja2Templates(directory=str(ROOT/"templates"))
 templates.env.filters["date_ru"]=lambda x: x.strftime("%d.%m.%Y") if x else "—"
 templates.env.filters["datetime_ru"]=lambda x: x.strftime("%d.%m.%Y · %H:%M") if x else "—"
 templates.env.filters["size_kb"]=lambda x:f"{x/1024:.0f} КБ" if x else "0 КБ"
+def display_updated_date(case):
+    # Demo-only display dates; actual database audit timestamps are untouched.
+    if case.is_demo:
+        return (datetime(2026,11,17)+timedelta(days=(int(case.id)-1)%8)).strftime("%d.%m.%Y")
+    return case.updated_at.strftime("%d.%m.%Y") if case.updated_at else "—"
+
+templates.env.filters["display_updated_date"]=display_updated_date
 
 @app.on_event("startup")
 def startup():
