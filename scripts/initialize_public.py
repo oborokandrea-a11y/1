@@ -6,7 +6,7 @@ import csv
 import os
 from sqlalchemy import select
 from app.database import Base, engine, SessionLocal
-from app.models import User, BaselineObservation
+from app.models import User, BaselineObservation, AgreementNumberSequence
 from app.security import hash_password, validate_password
 from app.settings import ROOT, settings
 
@@ -23,6 +23,11 @@ with engine.begin() as conn:
             conn.execute(text(f"ALTER TABLE company_cards ADD COLUMN {column} VARCHAR({size}) DEFAULT '' NOT NULL"))
 
 with SessionLocal() as db:
+    # Highest documented 2026 number in the supplied practice register: 1191/26.
+    # Never reset an existing sequence or overwrite issued numbers.
+    if not db.get(AgreementNumberSequence, 2026):
+        db.add(AgreementNumberSequence(year=2026, last_number=1191))
+        db.commit()
     if not db.scalar(select(User.id).where(User.role == "MANAGER")):
         username = os.getenv("INITIAL_ADMIN_USERNAME", "").strip().lower()
         password = os.getenv("INITIAL_ADMIN_PASSWORD", "")
