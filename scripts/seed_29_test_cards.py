@@ -2,6 +2,7 @@
 Idempotent, never generates signatures or impersonates approvals.
 """
 import os
+from datetime import datetime
 from sqlalchemy import select
 from app.database import SessionLocal
 from app.models import User, Agreement, CompanyCard, AuditEvent
@@ -127,7 +128,7 @@ COMPANIES = [
     "Москва"
   ]
 ]
-STAGES=["DRAFT","STAFF_REVIEW","COORDINATOR_REVIEW","OFFICE_REVIEW","PARTNER_REVIEW","REVISION_REQUIRED","SIGNING_PENDING"]
+STAGES=["STAFF_REVIEW","COORDINATOR_REVIEW","OFFICE_REVIEW","PARTNER_REVIEW","REVISION_REQUIRED","SIGNING_PENDING"]
 with SessionLocal() as db:
     student_demo=db.scalar(select(User).where(User.username=="student-demo"))
     enterprise_demo=db.scalar(select(User).where(User.username=="enterprise-demo"))
@@ -152,7 +153,9 @@ with SessionLocal() as db:
                     db.add(student);db.flush()
                 company,address=COMPANIES[i-1]
                 if existing:
-                    existing.status=STAGES[(i-1)%len(STAGES)]
+                    if existing.is_demo and existing.status=="DRAFT":
+                        existing.status="STAFF_REVIEW"
+                        existing.submitted_at=existing.submitted_at or datetime.utcnow()
                     existing.reference=reference
                     existing.company_name=company
                     existing.description='ТЕСТОВАЯ ЗАПИСЬ: вымышленный студент, организация из реестра практики 2026. Статус этапа смоделирован для проверки интерфейса; реального согласования и подписей нет.'
@@ -166,7 +169,7 @@ with SessionLocal() as db:
                 agreement=Agreement(reference=reference,title=f"Практическая подготовка — {student_name}",
                     practice_type="Производственная",student_id=student.id,company_name=company,
                     enterprise_user_id=enterprise_demo.id,practice_start="2026-07-01",
-                    practice_end="2026-07-28",status=STAGES[(i-1)%len(STAGES)],is_demo=True,
+                    practice_end="2026-07-28",status=STAGES[(i-1)%len(STAGES)],submitted_at=datetime.utcnow(),is_demo=True,
                     description="ТЕСТОВАЯ ЗАПИСЬ. Вымышленный студент; организация из реестра практики 2026. Статус этапа смоделирован; не является заключённым договором.")
                 db.add(agreement);db.flush()
                 db.add(CompanyCard(agreement_id=agreement.id,student_name=student_name,
