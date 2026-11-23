@@ -459,25 +459,37 @@ def overlay_demo_marks_pdf(pdf_bytes,case):
     image.save(stamp,format="PNG")
     pdf=fitz.open(stream=pdf_bytes,filetype="pdf")
     placed=0
-    for page in pdf:
-        # Search original positions on the finished page, including table cells.
+    import logging
+    logger=logging.getLogger("cifra.demo_seals")
+    diagnostics=[]
+    for page_index,page in enumerate(pdf):
+        # Prefer the exact printed М.П. marker; tolerate split letters and
+        # alternative spelling used in the university template.
         positions=[]
-        for term in ("М.П.","М. П.","М.П", "М. П"):
+        for term in ("М.П.", "М. П.", "М П", "М.П", "М. П", "Место печати"):
             positions.extend(page.search_for(term))
+        if not positions:
+            # Signature lines are used only when the template has no MP text.
+            for term in ("(подпись)", "подпись", "Подпись"):
+                positions=page.search_for(term)
+                if positions:break
         seen=set()
         for hit in positions:
-            key=(round(hit.x0),round(hit.y0))
+            key=(round(hit.x0/5),round(hit.y0/5))
             if key in seen:continue
             seen.add(key)
-            # Center the stamp over the original MP marker. It cannot
-            # change page count or move the surrounding contract text.
-            size=48
-            center_x=(hit.x0+hit.x1)/2
-            center_y=(hit.y0+hit.y1)/2
-            area=fitz.Rect(center_x-size/2,center_y-size/2,
-                           center_x+size/2,center_y+size/2)
+            size=58
+            cx=(hit.x0+hit.x1)/2
+            cy=(hit.y0+hit.y1)/2
+            area=fitz.Rect(cx-size/2,cy-size/2,cx+size/2,cy+size/2)
             page.insert_image(area,stream=stamp.getvalue(),overlay=True,keep_proportion=True)
             placed+=1
+        diagnostics.append(f"{page_index+1}:{len(seen)}")
+    logger.warning("Demo PDF agreement=%s status=%s pages=%s stamp_count=%s per_page=%s",
+                   case.id,case.status,len(pdf),placed,",".join(diagnostics))
+    if placed==0:
+        pdf.close()
+        raise HTTPException(422,"Не найдены места М.П. или подписи в PDF. Проверьте исходный шаблон договора.")
     result=pdf.tobytes(garbage=3,deflate=True)
     pdf.close()
     return result
