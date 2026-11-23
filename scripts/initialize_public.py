@@ -11,6 +11,17 @@ from app.security import hash_password, validate_password
 from app.settings import ROOT, settings
 
 Base.metadata.create_all(engine)
+# Add newly introduced optional company-card columns to existing SQLite databases.
+# create_all() creates new tables but does not migrate existing ones.
+from sqlalchemy import inspect, text
+with engine.begin() as conn:
+    existing = {c["name"] for c in inspect(conn).get_columns("company_cards")} if inspect(conn).has_table("company_cards") else set()
+    for column, size in {"company_short_name":250,"residency":30,"registration_country":120,
+                         "company_actual_address":450,"company_phone":60,"company_fax":60,
+                         "bank_account":40,"bank_name":250,"correspondent_account":40,"bank_bik":20}.items():
+        if column not in existing:
+            conn.execute(text(f"ALTER TABLE company_cards ADD COLUMN {column} VARCHAR({size}) DEFAULT '' NOT NULL"))
+
 with SessionLocal() as db:
     if not db.scalar(select(User.id).where(User.role == "MANAGER")):
         username = os.getenv("INITIAL_ADMIN_USERNAME", "").strip().lower()
