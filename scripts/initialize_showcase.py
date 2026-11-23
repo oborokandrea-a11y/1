@@ -22,7 +22,12 @@ with SessionLocal() as db:
             created=0
             with path.open(encoding="utf-8-sig",newline="") as source:
                 for i,row in enumerate(csv.DictReader(source)):
-                    ref="PILOT-"+row["source_reference"]
+                    ref="EXAMPLE-"+row["source_reference"]
+                    legacy=db.scalar(select(Agreement).where(Agreement.reference=="PILOT-"+row["source_reference"]))
+                    if legacy:
+                        legacy.reference=ref
+                        legacy.title="[ОБРАЗЕЦ] Обезличенная запись "+row["source_reference"]
+                        continue
                     if db.scalar(select(Agreement.id).where(Agreement.reference==ref)):
                         continue
                     # 57 completed / 46 active is a DEMONSTRATION distribution,
@@ -36,7 +41,7 @@ with SessionLocal() as db:
                     else:status="DRAFT"
                     case=Agreement(
                         reference=ref,
-                        title="[ПИЛОТНЫЕ ДАННЫЕ] Обезличенная запись "+row["source_reference"],
+                        title="[ОБРАЗЕЦ] Обезличенная запись "+row["source_reference"],
                         practice_type=row["practice_type"],
                         student_id=owner.id,
                         company_name="Обезличенное предприятие (пилот)",
