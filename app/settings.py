@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     ALLOW_EPHEMERAL_MEDIA: bool = False
     PERSISTENT_STORAGE_ROOT: str = ""
     BASE_URL: str = "http://127.0.0.1:8000"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_SSL: bool = False
+    UNIVERSITY_WEBHOOK_URL: str = ""
+    UNIVERSITY_WEBHOOK_SECRET: str = ""
 
     @property
     def production(self) -> bool:
