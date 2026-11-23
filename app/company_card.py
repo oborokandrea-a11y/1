@@ -514,19 +514,19 @@ def overlay_demo_marks_pdf(pdf_bytes,case):
             area=area & page.rect
             if area.is_empty:continue
             page.insert_image(area,stream=stamp.getvalue(),overlay=True,keep_proportion=True)
-            # Keep each label inside the corresponding half-page signing column.
+            # Keep the existing signer's printed ФИО visible below the
+            # signature line. The label belongs ABOVE the seal, not beside
+            # the name, and must never cover the bottom signatory text.
             column_left=0 if side=="left" else page.rect.width/2
             column_right=page.rect.width/2 if side=="left" else page.rect.width
             label_w=min(134,(column_right-column_left)-16)
             label_h=label_w*220/900
-            gap=5
-            if area.x1+gap+label_w <= column_right-6:
-                label_x=area.x1+gap
-            elif area.x0-gap-label_w >= column_left+6:
-                label_x=area.x0-gap-label_w
-            else:
-                label_x=max(column_left+6,min(cx-label_w/2,column_right-label_w-6))
-            label_y=max(6,min(cy-label_h/2,page.rect.height-label_h-6))
+            label_x=max(column_left+8,min(cx-label_w/2,column_right-label_w-8))
+            label_y=area.y0-label_h-9
+            if label_y<8:
+                # No safe room for a rectangular label: keep the original
+                # signatory name unobstructed rather than overlapping it.
+                label_y=8
             label_rect=fitz.Rect(label_x,label_y,label_x+label_w,label_y+label_h)
             page.insert_image(label_rect,stream=label_bytes.getvalue(),
                               overlay=True,keep_proportion=True)
