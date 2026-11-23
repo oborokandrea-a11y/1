@@ -11,7 +11,7 @@ import json
 from urllib.request import Request,urlopen
 from .settings import settings
 
-def verify_detached_cades(document:bytes,signature_b64:str,expected_role:str):
+def verify_detached_cades(document:bytes,signature_b64:str,expected_role:str,expected_organization:str,expected_signer:str):
     if not settings.UKEP_VERIFY_URL or not settings.UKEP_VERIFY_TOKEN:
         raise RuntimeError("Сервис криптографической проверки УКЭП не подключён")
     if len(signature_b64)>2_000_000:
@@ -22,7 +22,8 @@ def verify_detached_cades(document:bytes,signature_b64:str,expected_role:str):
     digest=hashlib.sha256(document).hexdigest()
     body=json.dumps({"document_base64":base64.b64encode(document).decode(),
                      "signature_base64":signature_b64,"document_sha256":digest,
-                     "expected_role":expected_role},separators=(",",":")).encode()
+                     "expected_role":expected_role,"expected_organization":expected_organization,
+                     "expected_signer":expected_signer},separators=(",",":")).encode()
     req=Request(settings.UKEP_VERIFY_URL,data=body,headers={
         "Authorization":"Bearer "+settings.UKEP_VERIFY_TOKEN,
         "Content-Type":"application/json"},method="POST")
@@ -36,8 +37,8 @@ def verify_detached_cades(document:bytes,signature_b64:str,expected_role:str):
         raise ValueError("УКЭП не прошла полную проверку")
     if result.get("document_sha256")!=digest:
         raise ValueError("Подписан другой документ")
-    if result.get("expected_role")!=expected_role:
-        raise ValueError("Подпись не соответствует роли подписанта")
+    if result.get("expected_role")!=expected_role or result.get("expected_organization")!=expected_organization:
+        raise ValueError("Подпись не соответствует стороне договора")
     return {"document_sha256":digest,"certificate_subject":str(result.get("certificate_subject",""))[:400],
             "certificate_serial":str(result.get("certificate_serial",""))[:120],
             "certificate_issuer":str(result.get("certificate_issuer",""))[:400],
