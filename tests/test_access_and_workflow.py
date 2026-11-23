@@ -34,11 +34,11 @@ def test_generated_company_card_can_be_submitted_without_upload():
         case=Agreement(reference="1192/26",title="Test",student_id=user.id,company_name="Test Co",
                        status="DRAFT",practice_start="2026-06-01",practice_end="2026-06-30")
         db.add(case);db.flush()
-        db.add(CompanyCard(agreement_id=case.id,student_name="Test Student",group_name="TEST",
+        db.add(CompanyCard(agreement_id=case.id,student_name="Test Student",group_name="TEST",course_name="4",
             department="Department",program="Economics",company_full_name="Test Co",
             company_address="Test address",company_inn="7706019535",director_position="Director",
             director_name="Director Name",director_basis="Charter",contact_name="Contact",
-            contact_phone="123",room_address="Address"))
+            contact_phone="123",contact_email="contact@example.com",room_address="Address"))
         db.flush()
         advance_agreement(db,user,case,"submit")
         assert case.status=="STAFF_REVIEW"
