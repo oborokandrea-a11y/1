@@ -522,14 +522,30 @@ def overlay_demo_marks_pdf(pdf_bytes,case):
             label_w=min(134,(column_right-column_left)-16)
             label_h=label_w*220/900
             label_x=max(column_left+8,min(cx-label_w/2,column_right-label_w-8))
-            label_y=area.y0-label_h-9
-            if label_y<8:
-                # No safe room for a rectangular label: keep the original
-                # signatory name unobstructed rather than overlapping it.
-                label_y=8
-            label_rect=fitz.Rect(label_x,label_y,label_x+label_w,label_y+label_h)
-            page.insert_image(label_rect,stream=label_bytes.getvalue(),
-                              overlay=True,keep_proportion=True)
+            # The rectangular signing notice belongs BELOW the printed
+            # signatory name. Find the lowest text line in the signing column
+            # below the seal, then leave a small gap.
+            lower_text=[]
+            for line in page.get_text("dict").get("blocks",[]):
+                if "lines" not in line:continue
+                for text_line in line["lines"]:
+                    bounds=fitz.Rect(text_line["bbox"])
+                    if (bounds.x0 < column_right and bounds.x1 > column_left
+                            and bounds.y0 >= area.y0-3
+                            and bounds.y1 < page.rect.height-12):
+                        lower_text.append(bounds)
+            name_bottom=max((rect.y1 for rect in lower_text
+                             if rect.y0 < min(page.rect.height-12,area.y1+105)),
+                            default=area.y1)
+            label_y=max(area.y1+7,name_bottom+7)
+            if label_y+label_h>page.rect.height-7:
+                # Do not cover the name or place a label outside the page.
+                # Skip this label when the existing template has no room.
+                label_y=None
+            if label_y is not None:
+                label_rect=fitz.Rect(label_x,label_y,label_x+label_w,label_y+label_h)
+                page.insert_image(label_rect,stream=label_bytes.getvalue(),
+                                  overlay=True,keep_proportion=True)
             placed+=1
             seen.add(side)
         diagnostics.append(f"{page_number}:{len(seen)}")
