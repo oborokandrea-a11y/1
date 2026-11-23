@@ -430,6 +430,90 @@ async def new_user(request:Request,db:Session=Depends(get_db)):
     db.commit();notify(request,"Учётная запись создана")
     return go("/team")
 
+@app.post("/team/pilot-credentials")
+def generate_pilot_credentials(request:Request,db:Session=Depends(get_db)):
+    """Manager-only, one-time CSV of freshly provisioned pilot credentials.
+
+    Passwords are never stored in plaintext. Existing enterprise accounts are
+    never reset or reassigned. Only unassigned agreements are linked.
+    """
+    user=require_user(request,db)
+    require_role(user,{"MANAGER"})
+    # The form token is transmitted as a normal HTML form field.
+    import asyncio
+    raise HTTPException(405,"Use the asynchronous pilot credential generator")
+
+@app.post("/team/pilot-credentials/download")
+async def download_pilot_credentials(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    require_role(user,{"MANAGER"})
+    form=await request.form()
+    require_csrf(request,form)
+    if form.get("confirm")!="yes":
+        raise HTTPException(422,"Подтвердите создание тестовых доступов")
+    import re
+    from sqlalchemy import update
+    output=io.StringIO()
+    writer=csv.writer(output,delimiter=";")
+    writer.writerow(["Роль","Предприятие / описание","Логин","Новый пароль","Договоров закреплено","Примечание"])
+    demo_roles={
+      "STUDENT":("student-demo","Студент (учебная роль)"),
+      "STAFF":("staff-demo","Сотрудник кафедры (учебная роль)"),
+      "COORDINATOR":("coordinator-demo","Ответственный за практику (учебная роль)"),
+      "OFFICE":("office-demo","Отдел практик (учебная роль)"),
+      "ENTERPRISE":("enterprise-demo","Предприятие (учебная роль)"),
+    }
+    for role,(username,label) in demo_roles.items():
+        password="P!"+secrets.token_urlsafe(18)+"7a"
+        account=db.scalar(select(User).where(User.username==username))
+        if account and account.role!=role:
+            raise HTTPException(409,"Конфликт тестового логина: "+username)
+        if account is None:
+            account=User(username=username,full_name=label,role=role,
+                         password_hash=hash_password(password),
+                         organization_name="Учебная организация" if role=="ENTERPRISE" else "")
+            db.add(account)
+        else:
+            account.password_hash=hash_password(password)
+            account.is_active=True
+        writer.writerow([ROLE_LABELS.get(role,role),label,username,password,"","Тестовая роль, пароль обновлён"])
+    db.flush()
+    # One dedicated test login per distinct company that has a real,
+    # unassigned agreement. Existing partner assignments are never changed.
+    companies=db.scalars(select(Agreement.company_name).where(
+        Agreement.is_demo.is_(False),Agreement.enterprise_user_id.is_(None)
+    ).distinct().order_by(Agreement.company_name)).all()
+    made=0
+    for company in companies:
+        if not company or not company.strip():continue
+        if made>=250:break
+        # Use a unique random suffix to prevent username collisions.
+        username="pilot-org-"+secrets.token_hex(5)
+        while db.scalar(select(User.id).where(User.username==username)):
+            username="pilot-org-"+secrets.token_hex(5)
+        password="P!"+secrets.token_urlsafe(18)+"7a"
+        partner=User(username=username,full_name="Тестовый представитель: "+company[:145],
+                     role="ENTERPRISE",organization_name=company[:200],
+                     password_hash=hash_password(password))
+        db.add(partner)
+        db.flush()
+        result=db.execute(update(Agreement).where(
+            Agreement.company_name==company,
+            Agreement.enterprise_user_id.is_(None),
+            Agreement.is_demo.is_(False)
+        ).values(enterprise_user_id=partner.id))
+        writer.writerow(["Предприятие",company,username,password,result.rowcount or 0,
+                         "Доступ только к закреплённым договорам"])
+        made+=1
+    log_event(db,user,"pilot_credentials_issued","user",user.id,
+              f"Выданы новые тестовые пароли для 5 ролей и {made} предприятий")
+    db.commit()
+    payload="\ufeff"+output.getvalue()
+    return Response(content=payload.encode("utf-8"),media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition":'attachment; filename="cifra_pilot_credentials.csv"',
+                 "Cache-Control":"no-store, no-cache, must-revalidate",
+                 "Pragma":"no-cache","X-Content-Type-Options":"nosniff"})
+
 @app.get("/partners",response_class=HTMLResponse)
 def partners(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db);require_role(user,STAFF_ROLES)
