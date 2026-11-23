@@ -101,12 +101,16 @@ def build_docx(case,card):
     section.left_margin=Cm(2.4);section.right_margin=Cm(1.5)
     style=doc.styles["Normal"];style.font.name="Times New Roman";style.font.size=Pt(11)
     style.paragraph_format.space_after=Pt(5)
+    style.paragraph_format.line_spacing=1.15
+    for sec in doc.sections:
+        sec.header_distance=Cm(0.8)
+        sec.footer_distance=Cm(0.8)
     def p(text="",bold=False):
         para=doc.add_paragraph()
         run=para.add_run(text);run.bold=bold
         return para
     def heading(text):
-        para=doc.add_paragraph();para.alignment=1;run=para.add_run(text);run.bold=True
+        para=doc.add_paragraph();para.alignment=1;run=para.add_run(text);run.bold=True;run.font.size=Pt(11)
     def date_ru(s):
         return datetime.strptime(s,"%Y-%m-%d").strftime("%d.%m.%Y")
     heading("Проект договора № "+case.reference)
@@ -159,7 +163,10 @@ def build_docx(case,card):
     row=t.add_row().cells;row[0].text="1";row[1].text=card.room_department or "Уточняется";row[2].text=card.room_address
     p("От Университета: уполномоченный представитель НИТУ МИСИС       От Профильной организации: "+card.director_name)
     p("Подпись: ______________ М.П.                     Подпись: ______________ М.П.")
-    doc.core_properties.title="Черновик договора о практической подготовке — НИТУ МИСИС"
+    doc.core_properties.title="Проект договора о практической подготовке — НИТУ МИСИС"
+    footer=doc.sections[0].footer.paragraphs[0]
+    footer.alignment=1
+    footer.add_run("Проект договора № "+case.reference+" · Не подписан сторонами").font.size=Pt(8)
     out=io.BytesIO();doc.save(out);out.seek(0);return out
 
 @router.get("/agreements/{agreement_id}/generate-docx")
