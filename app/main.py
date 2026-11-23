@@ -522,14 +522,14 @@ async def download_pilot_credentials(request:Request,db:Session=Depends(get_db))
 
 @app.get("/partners",response_class=HTMLResponse)
 def partners(request:Request,db:Session=Depends(get_db)):
-    user=require_user(request,db);require_role(user,STAFF_ROLES)
+    user=require_user(request,db);require_role(user,MANAGE_ROLES)
     cases=db.scalars(select(Agreement).where(Agreement.status!="COMPLETED").order_by(desc(Agreement.id))).all()
     invites=db.scalars(select(PartnerInvite).order_by(desc(PartnerInvite.id)).limit(30)).all()
     return render(request,db,"partners.html",user,active="partners",cases=cases,invites=invites)
 
 @app.post("/partners/invite")
 async def create_partner_invite(request:Request,db:Session=Depends(get_db)):
-    user=require_user(request,db);require_role(user,STAFF_ROLES)
+    user=require_user(request,db);require_role(user,MANAGE_ROLES)
     f=await request.form();require_csrf(request,f)
     try:case_id=int(f.get("agreement_id") or 0)
     except ValueError:case_id=0
