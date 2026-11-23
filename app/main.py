@@ -430,19 +430,6 @@ async def new_user(request:Request,db:Session=Depends(get_db)):
     db.commit();notify(request,"Учётная запись создана")
     return go("/team")
 
-@app.post("/team/pilot-credentials")
-def generate_pilot_credentials(request:Request,db:Session=Depends(get_db)):
-    """Manager-only, one-time CSV of freshly provisioned pilot credentials.
-
-    Passwords are never stored in plaintext. Existing enterprise accounts are
-    never reset or reassigned. Only unassigned agreements are linked.
-    """
-    user=require_user(request,db)
-    require_role(user,{"MANAGER"})
-    # The form token is transmitted as a normal HTML form field.
-    import asyncio
-    raise HTTPException(405,"Use the asynchronous pilot credential generator")
-
 @app.post("/team/pilot-credentials/download")
 async def download_pilot_credentials(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
