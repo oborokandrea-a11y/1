@@ -414,8 +414,7 @@ def build_docx(case,card):
     if unresolved:
         raise HTTPException(422,"В шаблоне остались незаполненные поля: "+", ".join(sorted(set(unresolved))))
     # Demo stamps belong at the existing М.П. fields, never in an appended block.
-    if case.is_demo and case.status=="COMPLETED":
-        add_demo_seals_at_mp(doc)
+    # PDF gets position-accurate overlays after conversion, not DOCX anchors.
     buffer=io.BytesIO()
     doc.save(buffer);buffer.seek(0)
     return buffer
@@ -434,6 +433,54 @@ def download(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     return StreamingResponse(out,media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
        headers={"Content-Disposition":download_filename(case,card,"docx"),
                 "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
+
+
+def overlay_demo_marks_pdf(pdf_bytes,case):
+    """Overlay transparent training marks on existing PDF text, no reflow."""
+    if not (case.is_demo and case.status=="COMPLETED"):
+        return pdf_bytes
+    import fitz
+    from PIL import Image, ImageDraw, ImageFont
+    image=Image.new("RGBA",(400,400),(255,255,255,0))
+    draw=ImageDraw.Draw(image)
+    ink=(20,78,161,245)
+    draw.ellipse((8,8,392,392),outline=ink,width=9)
+    draw.ellipse((28,28,372,372),outline=ink,width=4)
+    try:
+        font="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        large=ImageFont.truetype(font,35)
+        small=ImageFont.truetype(font,21)
+    except OSError:
+        large=small=ImageFont.load_default()
+    for y,label,face in ((155,"ОБРАЗЕЦ",large),(207,"ЭЛЕКТРОННАЯ",small),
+                          (245,"ПОДПИСЬ",small),(284,"НЕ УКЭП",small)):
+        draw.text((200,y),label,fill=ink,font=face,anchor="mm")
+    stamp=io.BytesIO()
+    image.save(stamp,format="PNG")
+    pdf=fitz.open(stream=pdf_bytes,filetype="pdf")
+    placed=0
+    for page in pdf:
+        # Search original positions on the finished page, including table cells.
+        positions=[]
+        for term in ("М.П.","М. П.","М.П", "М. П"):
+            positions.extend(page.search_for(term))
+        seen=set()
+        for hit in positions:
+            key=(round(hit.x0),round(hit.y0))
+            if key in seen:continue
+            seen.add(key)
+            # Center the stamp over the original MP marker. It cannot
+            # change page count or move the surrounding contract text.
+            size=48
+            center_x=(hit.x0+hit.x1)/2
+            center_y=(hit.y0+hit.y1)/2
+            area=fitz.Rect(center_x-size/2,center_y-size/2,
+                           center_x+size/2,center_y+size/2)
+            page.insert_image(area,stream=stamp.getvalue(),overlay=True,keep_proportion=True)
+            placed+=1
+    result=pdf.tobytes(garbage=3,deflate=True)
+    pdf.close()
+    return result
 
 
 def trim_demo_pdf(pdf_bytes, case):
@@ -472,7 +519,7 @@ def preview_generated_pdf(request:Request,agreement_id:int,db:Session=Depends(ge
         output=work/"agreement.pdf"
         if result.returncode!=0 or not output.exists():
             raise HTTPException(503,"Предпросмотр временно недоступен")
-        data=trim_demo_pdf(output.read_bytes(),case)
+        data=overlay_demo_marks_pdf(trim_demo_pdf(output.read_bytes(),case),case)
     return StreamingResponse(io.BytesIO(data),media_type="application/pdf",
         headers={"Content-Disposition":"inline","Cache-Control":"private, no-store",
                  "Content-Security-Policy":"sandbox allow-same-origin"})
@@ -498,7 +545,7 @@ def download_pdf(request:Request,agreement_id:int,db:Session=Depends(get_db)):
         pdf_path=work/"agreement.pdf"
         if result.returncode!=0 or not pdf_path.exists():
             raise HTTPException(503,"Не удалось сформировать PDF. Попробуйте скачать Word.")
-        content=trim_demo_pdf(pdf_path.read_bytes(),case)
+        content=overlay_demo_marks_pdf(trim_demo_pdf(pdf_path.read_bytes(),case),case)
     return StreamingResponse(io.BytesIO(content),media_type="application/pdf",
         headers={"Content-Disposition":download_filename(case,card,"pdf"),
                  "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
