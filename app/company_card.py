@@ -5,11 +5,11 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, update
 from docx import Document
 from docx.shared import Pt, Cm
 from .database import get_db
-from .models import User, Agreement, CompanyCard
+from .models import User, Agreement, CompanyCard, AgreementNumberSequence
 from .security import require_user, require_csrf, csrf_token, ROLE_LABELS
 from .services import STATUS_LABELS, log_event
 from .settings import ROOT
@@ -66,7 +66,10 @@ async def submit(request:Request,db:Session=Depends(get_db)):
     db.add(case);db.flush()
     # Monotonic database-generated identifier, independent of simultaneous submissions.
     # Official university numbering requires a verified starting point and approval.
-    case.reference=f"ПР-{case.id:06d}/{datetime.utcnow().year % 100:02d}"
+    year=datetime.utcnow().year
+    number=db.scalar(update(AgreementNumberSequence).where(AgreementNumberSequence.year==year).values(last_number=AgreementNumberSequence.last_number+1).returning(AgreementNumberSequence.last_number))
+    if number is None:raise HTTPException(503,"Нумерация договоров не настроена")
+    case.reference=f"{number}/{year % 100:02d}"
     card=CompanyCard(agreement_id=case.id,practice_paid=f.get("practice_paid")=="yes",**data)
     db.add(card);log_event(db,user,"company_card_created","agreement",case.id,"Студент заполнил карточку предприятия")
     db.commit()
