@@ -1,5 +1,4 @@
-<PARSED TEXT FOR SHEET: 1 / 1 TABS
-TAB NAME: data__baseline_103_anonymized.csv>index,source_reference,practice_type,submitted_date,forwarded_date,signed_date,campus_days,waiting_days,visits,returns,lost,evidence,external_delay_days
+index,source_reference,practice_type,submitted_date,forwarded_date,signed_date,campus_days,waiting_days,visits,returns,lost,evidence,external_delay_days
 0,PR-2026-001,Учебная,2026-04-15,2026-04-15,2026-04-24,9,0,3,0,0,Экспертная оценка,0
 1,PR-2026-002,Учебная,2026-04-15,2026-04-15,2026-04-27,12,0,2,0,0,Экспертная оценка,16
 2,PR-2026-003,Учебная,2026-04-17,2026-05-06,2026-05-20,33,19,3,2,0,Документально подтверждено,0
