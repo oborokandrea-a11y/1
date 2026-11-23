@@ -111,8 +111,8 @@ def build_docx(case,card):
         return datetime.strptime(s,"%Y-%m-%d").strftime("%d.%m.%Y")
     heading("Проект договора № "+case.reference)
     heading("об организации и проведении практической подготовки обучающихся НИТУ МИСИС")
-    p("Дата заключения: «___» __________ 20___ г.")
-    p("Федеральное государственное автономное образовательное учреждение высшего образования «Национальный исследовательский технологический университет «МИСИС», именуемое далее «Университет», в лице уполномоченного представителя ____________________, действующего на основании ____________________, с одной стороны, и "+card.company_full_name+", именуемое далее «Профильная организация», в лице "+card.director_position+" "+card.director_name+", действующего на основании "+card.director_basis+", с другой стороны, заключили настоящий договор.")
+    p("Дата заключения определяется при подписании сторонами.")
+    p("Федеральное государственное автономное образовательное учреждение высшего образования «Национальный исследовательский технологический университет «МИСИС», именуемое далее «Университет», в лице уполномоченного представителя, сведения о котором заполняются университетом перед подписанием, с одной стороны, и "+card.company_full_name+", именуемое далее «Профильная организация», в лице "+card.director_position+" "+card.director_name+", действующего на основании "+card.director_basis+", с другой стороны, заключили настоящий договор.")
     heading("1 Предмет договора")
     p("1.1. Предметом договора является взаимодействие сторон по организации и проведению практической подготовки обучающихся Университета в рамках образовательных программ.")
     p("1.2. Образовательная программа, вид практики, сроки и сведения об обучающемся определены в приложении № 1.")
@@ -130,14 +130,14 @@ def build_docx(case,card):
     p("5.1. Изменения и дополнения оформляются письменно и подписываются уполномоченными представителями.")
     p("5.2. Договор составляется в двух экземплярах, по одному для каждой стороны.")
     p("5.3. Контактное лицо профильной организации: "+card.contact_name+", тел. "+card.contact_phone+", e-mail "+card.contact_email+".")
-    p("5.4. Контактное лицо университета: "+(card.university_contact or "________________")+", тел. "+(card.university_phone or "________________")+", e-mail "+(card.university_email or "________________")+".")
+    p("5.4. Контактное лицо университета: "+(card.university_contact or "уточняется университетом")+", тел. "+(card.university_phone or "не указан")+", e-mail "+(card.university_email or "не указан")+".")
     heading("6 Адреса и реквизиты сторон")
     p("Университет: НИТУ МИСИС, 119049, Москва, Ленинский проспект, д. 4, стр. 1. ИНН 7706019535, КПП 770601001.")
     p("Профильная организация: "+card.company_full_name+" ("+card.company_short_name+"), "+card.company_address+", ИНН "+card.company_inn+", КПП "+card.company_kpp+", ОГРН "+card.company_ogrn+", ОКПО "+card.company_okpo+", ОКВЭД "+card.company_okved+".")
     p("Фактический адрес: "+card.company_actual_address+"; телефон: "+card.company_phone+"; факс: "+card.company_fax+".")
     p("Банковские реквизиты: "+card.bank_name+", расчётный счёт "+card.bank_account+", корреспондентский счёт "+card.correspondent_account+", БИК "+card.bank_bik+".")
-    p("От Университета: ____________________     От Профильной организации: "+card.director_name)
-    p("Подпись: ______________ М.П.                     Подпись: ______________ М.П.")
+    p("От Университета: уполномоченный представитель НИТУ МИСИС     От Профильной организации: "+card.director_name)
+    p("Подписи сторон проставляются при подписании договора. Печать — при наличии и необходимости.")
     doc.add_page_break()
     heading("Приложение № 1")
     heading("СОВМЕСТНЫЙ РАБОЧИЙ ПЛАН")
@@ -149,7 +149,7 @@ def build_docx(case,card):
         ("Образовательная программа",card.program),("Начало практики",date_ru(case.practice_start)),
         ("Окончание практики",date_ru(case.practice_end)),("Ф.И.О. обучающегося",card.student_name)]:
         row=t.add_row().cells;row[0].text=key;row[1].text=val
-    p("От Университета: ____________________       От Профильной организации: "+card.director_name)
+    p("От Университета: уполномоченный представитель НИТУ МИСИС       От Профильной организации: "+card.director_name)
     p("Подпись: ______________ М.П.                     Подпись: ______________ М.П.")
     doc.add_page_break()
     heading("Приложение № 2")
@@ -157,7 +157,7 @@ def build_docx(case,card):
     t=doc.add_table(rows=1,cols=3);t.style="Table Grid"
     for c,v in zip(t.rows[0].cells,("№ п/п","Наименование подразделения","Адрес, кабинет / помещение")):c.text=v
     row=t.add_row().cells;row[0].text="1";row[1].text=card.room_department or "Уточняется";row[2].text=card.room_address
-    p("От Университета: ____________________       От Профильной организации: "+card.director_name)
+    p("От Университета: уполномоченный представитель НИТУ МИСИС       От Профильной организации: "+card.director_name)
     p("Подпись: ______________ М.П.                     Подпись: ______________ М.П.")
     doc.core_properties.title="Черновик договора о практической подготовке — НИТУ МИСИС"
     out=io.BytesIO();doc.save(out);out.seek(0);return out
@@ -173,37 +173,26 @@ def download(request:Request,agreement_id:int,db:Session=Depends(get_db)):
 
 @router.get("/agreements/{agreement_id}/generate-pdf")
 def download_pdf(request:Request,agreement_id:int,db:Session=Depends(get_db)):
-    """Private unsigned PDF preview of the agreement and both annexes."""
-    from xml.sax.saxutils import escape
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER
-    from reportlab.lib import colors
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.lib.pagesizes import A4
-    user=require_user(request,db);case,card=get_case(db,user,agreement_id)
-    font="/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    pdfmetrics.registerFont(TTFont("CifraSans",font))
-    normal=ParagraphStyle("body",fontName="CifraSans",fontSize=9,leading=14,spaceAfter=9)
-    heading=ParagraphStyle("head",parent=normal,fontSize=11,leading=16,alignment=TA_CENTER,spaceAfter=14)
-    out=io.BytesIO();pdf=SimpleDocTemplate(out,pagesize=A4,leftMargin=48,rightMargin=48,topMargin=45,bottomMargin=45)
-    def para(t,style=normal):return Paragraph(escape(str(t or "")),style)
-    def dr(s):return datetime.strptime(s,"%Y-%m-%d").strftime("%d.%m.%Y")
-    story=[para("ПРОЕКТ ДОГОВОРА № "+case.reference,heading),para("Об организации и проведении практической подготовки обучающихся НИТУ МИСИС",heading),
-      para("Документ сформирован автоматически. Не подписан. Требует проверки университетом."),
-      para("ФГАОУ ВО «НИТУ МИСИС» (Университет) и "+card.company_full_name+" (Профильная организация) в лице "+card.director_position+" "+card.director_name+", действующего на основании "+card.director_basis+", заключают договор о практической подготовке."),
-      para("1. Предмет договора",heading),para("Стороны организуют практическую подготовку обучающегося в соответствии с совместным рабочим планом (приложение № 1) и перечнем помещений (приложение № 2)."),
-      para("2. Права и обязанности сторон",heading),para("Университет организует и контролирует практику. Профильная организация предоставляет условия для практической подготовки, обеспечивает инструктаж и соблюдение требований безопасности."),
-      para("3. Срок действия договора",heading),para("Договор действует со дня подписания до "+dr(case.practice_end)+"."),
-      para("4. Ответственность сторон",heading),para("Стороны несут ответственность в соответствии с законодательством Российской Федерации."),
-      para("5. Заключительные положения",heading),para("Изменения оформляются письменно и подписываются уполномоченными представителями."),
-      para("6. Реквизиты и подписи",heading),para("Университет: НИТУ МИСИС, Москва, Ленинский проспект, д. 4, стр. 1."),
-      para("Предприятие: "+card.company_full_name+"; адрес: "+card.company_address+"; ИНН: "+card.company_inn+"; КПП: "+card.company_kpp+"; ОГРН: "+card.company_ogrn+"."),
-      para("Банк: "+card.bank_name+"; расчётный счёт: "+card.bank_account+"; корр. счёт: "+card.correspondent_account+"; БИК: "+card.bank_bik+"."),
-      para("От университета: ____________________    От предприятия: ____________________"),PageBreak(),
-      para("Приложение № 1. Совместный рабочий план",heading)]
-    rows=[("Вид практики",case.practice_type),("Кафедра",card.department),("Курс и группа",card.course_name+" "+card.group_name),("Программа",card.program),("Сроки",dr(case.practice_start)+" — "+dr(case.practice_end)),("Студент",card.student_name)]
-    t=Table([[para(k),para(v)] for k,v in rows],colWidths=[155,340],hAlign="LEFT");t.setStyle(TableStyle([("GRID",(0,0),(-1,-1),0.4,colors.grey),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),8),("BOTTOMPADDING",(0,0),(-1,-1),8)]));story.extend([t,PageBreak(),para("Приложение № 2. Помещения для практики",heading),para("Подразделение: "+card.room_department),para("Адрес: "+card.room_address)])
-    pdf.build(story);out.seek(0)
-    return StreamingResponse(out,media_type="application/pdf",headers={"Content-Disposition":f'attachment; filename="cifra_agreement_{case.id}_unsigned.pdf"',"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
+    """Render the exact same DOCX document to PDF using LibreOffice."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    user=require_user(request,db)
+    case,card=get_case(db,user,agreement_id)
+    source=build_docx(case,card)
+    with tempfile.TemporaryDirectory(prefix="cifra_pdf_") as folder:
+        work=Path(folder)
+        docx_path=work/"agreement.docx"
+        docx_path.write_bytes(source.getvalue())
+        result=subprocess.run(
+            ["libreoffice","-env:UserInstallation=file://"+str(work/"lo-profile"),
+             "--headless","--convert-to","pdf:writer_pdf_Export",
+             "--outdir",str(work),str(docx_path)],
+            capture_output=True,text=True,timeout=75,check=False)
+        pdf_path=work/"agreement.pdf"
+        if result.returncode!=0 or not pdf_path.exists():
+            raise HTTPException(503,"Не удалось сформировать PDF. Попробуйте скачать Word.")
+        content=pdf_path.read_bytes()
+    return StreamingResponse(io.BytesIO(content),media_type="application/pdf",
+        headers={"Content-Disposition":f'attachment; filename="cifra_agreement_{case.id}_draft.pdf"',
+                 "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
