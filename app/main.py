@@ -71,6 +71,14 @@ async def unauthorized_handler(request,exc):
 async def forbidden_handler(request,exc):
     return templates.TemplateResponse(request,"error.html",{"title":"Недостаточно прав","message":str(exc.detail),"user":None,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,"csrf_token":csrf_token(request),"flash":None},status_code=403)
 
+@app.exception_handler(422)
+async def validation_handler(request,exc):
+    # Show an understandable validation error instead of raw JSON.
+    return templates.TemplateResponse(request,"error.html",
+        {"title":"Проверьте данные","message":str(exc.detail),
+         "user":None,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,
+         "csrf_token":csrf_token(request),"flash":None},status_code=422)
+
 @app.exception_handler(404)
 async def not_found_handler(request,exc):
     return templates.TemplateResponse(request,"error.html",{"title":"Страница не найдена","message":"Проверьте адрес или вернитесь к списку документов.","user":None,"role_labels":ROLE_LABELS,"status_labels":STATUS_LABELS,"csrf_token":csrf_token(request),"flash":None},status_code=404)
