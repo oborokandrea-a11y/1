@@ -151,7 +151,7 @@ def build_docx(case,card):
     with SessionLocal() as template_db:
         latest=template_db.scalar(select(DocumentTemplate).where(DocumentTemplate.template_kind=="practice_agreement").order_by(DocumentTemplate.id.desc()).limit(1))
         if not latest:
-            raise HTTPException(503,"Типовой договор НИТУ МИСИС ещё не установлен. Формирование временно недоступно.")
+            raise HTTPException(503,"Типовой договор образовательной организации ещё не установлен. Формирование временно недоступно.")
         template_bytes=get_file(latest.object_key)
     doc=Document(io.BytesIO(template_bytes))
     from datetime import date
@@ -209,80 +209,6 @@ def build_docx(case,card):
     doc.save(buffer);buffer.seek(0)
     return buffer
 
-def build_docx_legacy(case,card):
-    doc=Document()
-    section=doc.sections[0]
-    section.top_margin=Cm(1.8);section.bottom_margin=Cm(1.7)
-    section.left_margin=Cm(2.4);section.right_margin=Cm(1.5)
-    style=doc.styles["Normal"];style.font.name="Times New Roman";style.font.size=Pt(11)
-    style.paragraph_format.space_after=Pt(5)
-    style.paragraph_format.line_spacing=1.15
-    for sec in doc.sections:
-        sec.header_distance=Cm(0.8)
-        sec.footer_distance=Cm(0.8)
-    def p(text="",bold=False):
-        para=doc.add_paragraph()
-        run=para.add_run(text);run.bold=bold
-        return para
-    def heading(text):
-        para=doc.add_paragraph();para.alignment=1;run=para.add_run(text);run.bold=True;run.font.size=Pt(11)
-    def date_ru(s):
-        return datetime.strptime(s,"%Y-%m-%d").strftime("%d.%m.%Y")
-    heading("Проект договора № "+case.reference)
-    heading("об организации и проведении практической подготовки обучающихся НИТУ МИСИС")
-    p("Дата заключения определяется при подписании сторонами.")
-    p("Федеральное государственное автономное образовательное учреждение высшего образования «Национальный исследовательский технологический университет «МИСИС», именуемое далее «Университет», в лице уполномоченного представителя, сведения о котором заполняются университетом перед подписанием, с одной стороны, и "+card.company_full_name+", именуемое далее «Профильная организация», в лице "+card.director_position+" "+card.director_name+", действующего на основании "+card.director_basis+", с другой стороны, заключили настоящий договор.")
-    heading("1 Предмет договора")
-    p("1.1. Предметом договора является взаимодействие сторон по организации и проведению практической подготовки обучающихся Университета в рамках образовательных программ.")
-    p("1.2. Образовательная программа, вид практики, сроки и сведения об обучающемся определены в приложении № 1.")
-    p("1.3. Помещения профильной организации, используемые для практической подготовки, указаны в приложении № 2.")
-    heading("2 Права и обязанности сторон")
-    p("2.1. Университет назначает руководителя практики, организует направление обучающегося, обеспечивает методическое сопровождение и контролирует выполнение программы практики.")
-    p("2.2. Профильная организация предоставляет условия и оборудование для практики, назначает ответственное лицо, обеспечивает охрану труда, инструктаж и соблюдение требований безопасности.")
-    p("2.3. Обучающийся обязан соблюдать правила внутреннего трудового распорядка, охраны труда и режим конфиденциальности.")
-    heading("3 Срок действия договора")
-    p("3.1. Договор вступает в силу со дня подписания и действует до "+date_ru(case.practice_end)+".")
-    p("3.2. Изменения и прекращение договора оформляются по соглашению сторон в установленном порядке.")
-    heading("4 Ответственность сторон")
-    p("4.1. Стороны несут ответственность в соответствии с законодательством Российской Федерации.")
-    heading("5 Заключительные положения")
-    p("5.1. Изменения и дополнения оформляются письменно и подписываются уполномоченными представителями.")
-    p("5.2. Договор составляется в двух экземплярах, по одному для каждой стороны.")
-    p("5.3. Контактное лицо профильной организации: "+card.contact_name+", тел. "+card.contact_phone+", e-mail "+card.contact_email+".")
-    p("5.4. Контактное лицо университета: "+(card.university_contact or "уточняется университетом")+", тел. "+(card.university_phone or "не указан")+", e-mail "+(card.university_email or "не указан")+".")
-    heading("6 Адреса и реквизиты сторон")
-    p("Университет: НИТУ МИСИС, 119049, Москва, Ленинский проспект, д. 4, стр. 1. ИНН 7706019535, КПП 770601001.")
-    p("Профильная организация: "+card.company_full_name+" ("+card.company_short_name+"), "+card.company_address+", ИНН "+card.company_inn+", КПП "+card.company_kpp+", ОГРН "+card.company_ogrn+", ОКПО "+card.company_okpo+", ОКВЭД "+card.company_okved+".")
-    p("Фактический адрес: "+card.company_actual_address+"; телефон: "+card.company_phone+"; факс: "+card.company_fax+".")
-    p("Банковские реквизиты: "+card.bank_name+", расчётный счёт "+card.bank_account+", корреспондентский счёт "+card.correspondent_account+", БИК "+card.bank_bik+".")
-    p("От Университета: уполномоченный представитель НИТУ МИСИС     От Профильной организации: "+card.director_name)
-    p("Подписи сторон проставляются при подписании договора. Печать — при наличии и необходимости.")
-    doc.add_page_break()
-    heading("Приложение № 1")
-    heading("СОВМЕСТНЫЙ РАБОЧИЙ ПЛАН")
-    p("проведения практической подготовки")
-    t=doc.add_table(rows=0,cols=2);t.style="Table Grid"
-    for key,val in [
-        ("Вид практики",case.practice_type+(", оплачивается" if card.practice_paid else ", не оплачивается")),
-        ("Кафедра",card.department),("Курс, группа",card.course_name+", "+card.group_name),
-        ("Образовательная программа",card.program),("Начало практики",date_ru(case.practice_start)),
-        ("Окончание практики",date_ru(case.practice_end)),("Ф.И.О. обучающегося",card.student_name)]:
-        row=t.add_row().cells;row[0].text=key;row[1].text=val
-    p("От Университета: уполномоченный представитель НИТУ МИСИС       От Профильной организации: "+card.director_name)
-    p("Подпись: ______________ М.П.                     Подпись: ______________ М.П.")
-    doc.add_page_break()
-    heading("Приложение № 2")
-    heading("Помещения профильной организации для проведения практической подготовки")
-    t=doc.add_table(rows=1,cols=3);t.style="Table Grid"
-    for c,v in zip(t.rows[0].cells,("№ п/п","Наименование подразделения","Адрес, кабинет / помещение")):c.text=v
-    row=t.add_row().cells;row[0].text="1";row[1].text=card.room_department or "Уточняется";row[2].text=card.room_address
-    p("От Университета: уполномоченный представитель НИТУ МИСИС       От Профильной организации: "+card.director_name)
-    p("Подпись: ______________ М.П.                     Подпись: ______________ М.П.")
-    doc.core_properties.title="Проект договора о практической подготовке — НИТУ МИСИС"
-    footer=doc.sections[0].footer.paragraphs[0]
-    footer.alignment=1
-    footer.add_run("Проект договора № "+case.reference+" · Не подписан сторонами").font.size=Pt(8)
-    out=io.BytesIO();doc.save(out);out.seek(0);return out
 
 @router.get("/agreements/{agreement_id}/generate-docx")
 def download(request:Request,agreement_id:int,db:Session=Depends(get_db)):
