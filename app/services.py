@@ -6,8 +6,8 @@ from .security import require_role
 
 STATUS_LABELS={
  "DRAFT":"Черновик", "REVISION_REQUIRED":"На доработке", "STAFF_REVIEW":"Проверка кафедры",
- "COORDINATOR_REVIEW":"Ответственный за практику", "OFFICE_REVIEW":"Отдел практик",
- "PARTNER_REVIEW":"Согласование предприятия", "SIGNING_PENDING":"Ожидает УКЭП сторон", "COMPLETED":"Подписан обеими сторонами",
+ "COORDINATOR_REVIEW":"Ответственный за практику", "OFFICE_REVIEW":"Согласование и УКЭП отдела практик",
+ "PARTNER_REVIEW":"Согласование и УКЭП предприятия", "SIGNING_PENDING":"Согласование и подписание сторонами", "COMPLETED":"Подписан обеими сторонами",
 }
 STATUS_STEPS=["DRAFT","STAFF_REVIEW","COORDINATOR_REVIEW","OFFICE_REVIEW","PARTNER_REVIEW","SIGNING_PENDING","COMPLETED"]
 ACTIONS_LABELS={"submit":"Отправить на согласование","staff_approve":"Проверено кафедрой", "coordinator_approve":"Предварительно одобрено", "office_approve":"Подтверждено отделом практик","partner_approve":"Подтверждено предприятием", "return":"Вернуть на доработку"}
