@@ -18,16 +18,16 @@
  {% if user.role in ['COORDINATOR','OFFICE','MANAGER'] %}<a href="/team">Пользователи</a>{% endif %}
  <a href="/guide">Инструкция</a></nav>
  {% endif %}
- <div class="sidebar-bottom"><span class="online-pulse"></span> Система доступна <small>Пилотная среда · без УКЭП</small></div>
+ <div class="sidebar-bottom"><span class="online-pulse"></span> Система доступна <small>Система электронного документооборота</small></div>
  </aside>
  <div class="workspace"><header class="topbar"><div class="top-left"><button type="button" class="mobile-menu" aria-label="Меню" data-toggle-sidebar>☰</button><span class="breadcrumb">Цифра <span> / </span> {% block crumb %}Рабочая область{% endblock %}</span></div><div class="account-info"><span class="account-role">{{role_labels.get(user.role)}}</span><a href="/profile" class="account-chip"><span class="avatar">{{ user.full_name[:1] | upper }}</span><span class="account-name">{{user.full_name}}</span></a><form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button class="logout-btn" title="Выйти" aria-label="Выйти">↗</button></form></div></header>
  <main class="main-content">{% if flash %}<div class="alert {{'alert-danger' if flash.kind=='error' else 'alert-ok'}}">{{flash.message}}</div>{% endif %}{% block content %}{% endblock %}</main>
- <footer class="app-footer">© Цифра · исследовательский пилотный проект · Электронное согласование ≠ юридически значимая электронная подпись</footer></div>
+ <footer class="app-footer">© Цифра · Система электронного документооборота · Согласование не является электронной подписью</footer></div>
  </div>
 {% else %}
 <header class="public-header"><a href="/" class="brand"><span class="brand-logo">Ц</span><span>Цифра<small>ЕДИНАЯ СИСТЕМА СОГЛАСОВАНИЯ</small></span></a><nav><a href="/#features">Возможности</a><a href="/#process">Процесс</a><a href="/login" class="btn btn-primary btn-small">Войти в кабинет ↗</a></nav></header>
 {% if flash %}<div class="public-alert alert {{'alert-danger' if flash.kind=='error' else 'alert-ok'}}">{{flash.message}}</div>{% endif %}
 {% block public_content %}{% endblock %}
-<footer class="public-footer">© Цифра · Универсальная платформа согласования практик · Рабочий пилот</footer>
+<footer class="public-footer">© Цифра · Система электронного документооборота</footer>
 {% endif %}
 </body></html>
