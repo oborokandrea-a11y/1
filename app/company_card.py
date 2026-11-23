@@ -383,6 +383,22 @@ def download(request:Request,agreement_id:int,db:Session=Depends(get_db)):
                 "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
 
 
+def trim_demo_pdf(pdf_bytes, case):
+    """The demo PDF contains only the six requested template pages."""
+    if not case.is_demo:
+        return pdf_bytes
+    from pypdf import PdfReader, PdfWriter
+    reader=PdfReader(io.BytesIO(pdf_bytes))
+    if len(reader.pages)<=6:
+        return pdf_bytes
+    writer=PdfWriter()
+    for page in reader.pages[:6]:
+        writer.add_page(page)
+    output=io.BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
 @router.get("/agreements/{agreement_id}/preview-pdf")
 def preview_generated_pdf(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     """Same draft as downloadable PDF, embedded on the agreement page."""
@@ -403,7 +419,7 @@ def preview_generated_pdf(request:Request,agreement_id:int,db:Session=Depends(ge
         output=work/"agreement.pdf"
         if result.returncode!=0 or not output.exists():
             raise HTTPException(503,"Предпросмотр временно недоступен")
-        data=output.read_bytes()
+        data=trim_demo_pdf(output.read_bytes(),case)
     return StreamingResponse(io.BytesIO(data),media_type="application/pdf",
         headers={"Content-Disposition":"inline","Cache-Control":"private, no-store",
                  "Content-Security-Policy":"sandbox allow-same-origin"})
@@ -429,7 +445,7 @@ def download_pdf(request:Request,agreement_id:int,db:Session=Depends(get_db)):
         pdf_path=work/"agreement.pdf"
         if result.returncode!=0 or not pdf_path.exists():
             raise HTTPException(503,"Не удалось сформировать PDF. Попробуйте скачать Word.")
-        content=pdf_path.read_bytes()
+        content=trim_demo_pdf(pdf_path.read_bytes(),case)
     return StreamingResponse(io.BytesIO(content),media_type="application/pdf",
         headers={"Content-Disposition":download_filename(case,card,"pdf"),
                  "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
