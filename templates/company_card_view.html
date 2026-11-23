@@ -1,0 +1,12 @@
+{% extends 'base.html' %}{% block title %}Готовый проект договора — Цифра{% endblock %}{% block crumb %}Проект договора{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="kicker">АНКЕТА СОХРАНЕНА</div><h1>Проект договора сформирован</h1><p>Данные предприятия сохранены в карточке. Документ доступен для скачивания и проверки.</p></div></div>
+<section class="panel" style="max-width:900px;padding:28px">
+<h2>{{card.company_full_name}}</h2>
+<p>Студент: {{card.student_name}} · {{card.group_name}}</p>
+<p>Практика: {{case.practice_start}} — {{case.practice_end}}</p>
+<p>ИНН: {{card.company_inn}} · Подписант: {{card.director_name}}</p>
+<div class="note-soft">Документ содержит основной текст и приложения № 1 и № 2. Это редактируемый черновик, не подписанный договор. Сверьте текст с актуальной формой вашего университета.</div>
+<div class="form-actions"><a class="btn btn-primary" href="/agreements/{{case.id}}/generate-docx">Скачать договор Word (.docx)</a><a class="btn btn-secondary" href="/agreements/{{case.id}}">Открыть карточку договора</a></div>
+</section>
+{% endblock %}
