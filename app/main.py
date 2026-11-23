@@ -122,9 +122,9 @@ def as_date(value):
     except ValueError: return None
 
 def scoped_agreements(db,user):
-    stmt=select(Agreement).where(Agreement.is_demo.is_(False))
+    stmt=select(Agreement).where(Agreement.is_demo.is_(True) if user.username.endswith("-demo") or user.username.startswith("cifra-test-student-") else Agreement.is_demo.is_(False))
     if user.role=="STUDENT":stmt=stmt.where(Agreement.student_id==user.id)
-    elif user.role=="ENTERPRISE":stmt=stmt.where(Agreement.enterprise_user_id==user.id,Agreement.is_demo.is_(False))
+    elif user.role=="ENTERPRISE":stmt=stmt.where(Agreement.enterprise_user_id==user.id)
     return stmt
 
 def read_case(db,user,agreement_id):
