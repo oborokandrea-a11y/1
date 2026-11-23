@@ -33,7 +33,7 @@ def context(request, user, **kw):
 def form(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
     if user.role!="STUDENT":raise HTTPException(403,"Анкета доступна студенту")
-    existing=db.scalar(select(Agreement).join(CompanyCard,CompanyCard.agreement_id==Agreement.id).where(Agreement.student_id==user.id).order_by(Agreement.id.desc()))
+    existing=db.scalar(select(Agreement).join(CompanyCard,CompanyCard.agreement_id==Agreement.id).where(Agreement.student_id==user.id,Agreement.is_demo.is_(False)).order_by(Agreement.id.desc()))
     if existing:return RedirectResponse(f"/agreements/{existing.id}/company-card",status_code=303)
     return views.TemplateResponse(request,"company_card.html",context(request,user,card=None))
 
@@ -41,7 +41,7 @@ def form(request:Request,db:Session=Depends(get_db)):
 async def submit(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db)
     if user.role!="STUDENT":raise HTTPException(403,"Анкета доступна студенту")
-    existing=db.scalar(select(Agreement.id).join(CompanyCard,CompanyCard.agreement_id==Agreement.id).where(Agreement.student_id==user.id))
+    existing=db.scalar(select(Agreement.id).join(CompanyCard,CompanyCard.agreement_id==Agreement.id).where(Agreement.student_id==user.id,Agreement.is_demo.is_(False)))
     if existing:raise HTTPException(409,"Карточка уже создана; повторное создание недоступно")
     f=await request.form();require_csrf(request,f)
     data={key:safe(f.get(key)) for key in FIELDS}
