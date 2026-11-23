@@ -150,48 +150,60 @@ def show(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     return views.TemplateResponse(request,"company_card_view.html",context(request,user,case=case,card=card))
 
 def add_demo_seals_at_mp(doc):
-    """Place visibly invalid demo seals at existing М.П. markers, not on new pages."""
+    """Insert clearly fictional signing marks inside existing М.П. paragraphs."""
     from PIL import Image, ImageDraw, ImageFont
     from docx.shared import Cm
-    stamp=Image.new("RGB",(360,360),"white")
-    draw=ImageDraw.Draw(stamp)
-    blue=(23,76,173)
-    for inset,width in ((8,6),(22,3),(49,3)):
-        draw.ellipse((inset,inset,360-inset,360-inset),outline=blue,width=width)
-    font_path="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    font=ImageFont.truetype(font_path,25)
-    small=ImageFont.truetype(font_path,14)
-    for y,label,f in ((135,"ОБРАЗЕЦ",font),(182,"УЧЕБНАЯ ПЕЧАТЬ",small),
-                      (208,"НЕ ИМЕЕТ",small),(232,"ЮРИДИЧЕСКОЙ СИЛЫ",small)):
-        draw.text((180,y),label,fill=blue,font=f,anchor="mm")
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    image=Image.new("RGBA",(420,420),(255,255,255,0))
+    draw=ImageDraw.Draw(image)
+    blue=(27,87,173,235)
+    for inset,width in ((8,7),(24,3),(54,3)):
+        draw.ellipse((inset,inset,420-inset,420-inset),outline=blue,width=width)
+    try:
+        font="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        big=ImageFont.truetype(font,39)
+        small=ImageFont.truetype(font,22)
+    except OSError:
+        big=small=ImageFont.load_default()
+    for y,label,face in ((156,"ОБРАЗЕЦ",big),(208,"ЭЛЕКТРОННО",small),
+                          (242,"ПОДПИСАНО",small),(282,"НЕ УКЭП",small)):
+        draw.text((210,y),label,fill=blue,font=face,anchor="mm")
     buffer=io.BytesIO()
-    stamp.save(buffer,format="PNG")
+    image.save(buffer,format="PNG")
+    count=0
     def put(paragraph):
+        nonlocal count
         if not re.search(r"М\\s*\\.\\s*П\\s*\\.",paragraph.text,re.I):
             return
-        # Keep the seal inline beside М.П. to avoid shifting appendix tables or adding pages.
-        for run in paragraph.runs:
-            match=re.search(r"М\\s*\\.\\s*П\\s*\\.",run.text,re.I)
-            if match:
-                before,after=run.text[:match.end()],run.text[match.end():]
-                run.text=before
-                buffer.seek(0)
-                image_run=paragraph.add_run()
-                image_run.add_picture(buffer,width=Cm(1.25))
-                if after:paragraph.add_run(after)
-                return
+        if count>=12:return
+        # An inline drawing in its own run is inserted immediately after the
+        # run containing М.П., rather than appended at the paragraph end.
+        runs=list(paragraph.runs)
+        full="".join(run.text for run in runs)
+        match=re.search(r"М\\s*\\.\\s*П\\s*\\.",full,re.I)
+        if not match:return
+        offset=0
+        target=None
+        for run in runs:
+            offset+=len(run.text)
+            if offset>=match.end():
+                target=run
+                break
+        if target is None:return
         buffer.seek(0)
-        paragraph.add_run().add_picture(buffer,width=Cm(1.25))
-    for paragraph in doc.paragraphs:put(paragraph)
-    visited=set()
-    def walk(table):
+        pic=paragraph.add_run()
+        pic.add_picture(buffer,width=Cm(1.55))
+        target._r.addnext(pic._r)
+        count+=1
+    def scan_table(table):
         for row in table.rows:
             for cell in row.cells:
-                if cell._tc in visited:continue
-                visited.add(cell._tc)
                 for paragraph in cell.paragraphs:put(paragraph)
-                for nested in cell.tables:walk(nested)
-    for table in doc.tables:walk(table)
+                for nested in cell.tables:scan_table(nested)
+    for paragraph in doc.paragraphs:put(paragraph)
+    for table in doc.tables:scan_table(table)
+    return count
 
 
 def build_demo_docx(case,card):
@@ -375,7 +387,7 @@ def build_docx(case,card):
     if unresolved:
         raise HTTPException(422,"В шаблоне остались незаполненные поля: "+", ".join(sorted(set(unresolved))))
     # Demo stamps belong at the existing М.П. fields, never in an appended block.
-    if case.is_demo:
+    if case.is_demo and case.status=="COMPLETED":
         add_demo_seals_at_mp(doc)
     buffer=io.BytesIO()
     doc.save(buffer);buffer.seek(0)
