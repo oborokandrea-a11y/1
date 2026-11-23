@@ -23,10 +23,14 @@ with engine.begin() as conn:
             conn.execute(text(f"ALTER TABLE company_cards ADD COLUMN {column} VARCHAR({size}) DEFAULT '' NOT NULL"))
 
 with SessionLocal() as db:
-    # Highest documented 2026 number in the supplied practice register: 1191/26.
+    # Uploaded signed-format sample confirms agreement 1316/26 (22.06.2026),\n    # higher than the previously observed 1191/26. Never decrease the counter.
     # Never reset an existing sequence or overwrite issued numbers.
-    if not db.get(AgreementNumberSequence, 2026):
-        db.add(AgreementNumberSequence(year=2026, last_number=1191))
+    seq=db.get(AgreementNumberSequence, 2026)
+    if seq is None:
+        db.add(AgreementNumberSequence(year=2026, last_number=1316))
+        db.commit()
+    elif seq.last_number < 1316:
+        seq.last_number=1316
         db.commit()
     if not db.scalar(select(User.id).where(User.role == "MANAGER")):
         username = os.getenv("INITIAL_ADMIN_USERNAME", "").strip().lower()
