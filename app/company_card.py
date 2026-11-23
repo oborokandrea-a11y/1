@@ -190,6 +190,9 @@ def build_docx(case,card):
     def replace_runs(paragraph):
         # Replacements preserve existing DOCX styles when placeholders are
         # contained in a run. Cross-run placeholders are reconstructed.
+        for run in paragraph.runs:
+            for key,value in values.items():
+                run.text=run.text.replace("{{"+key+"}}",value)
         original="".join(r.text for r in paragraph.runs)
         if "{{" not in original:return
         updated=original
