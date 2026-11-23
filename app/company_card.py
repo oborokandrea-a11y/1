@@ -227,6 +227,31 @@ def download(request:Request,agreement_id:int,db:Session=Depends(get_db)):
                 "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
 
 
+@router.get("/agreements/{agreement_id}/preview-pdf")
+def preview_generated_pdf(request:Request,agreement_id:int,db:Session=Depends(get_db)):
+    """Same draft as downloadable PDF, embedded on the agreement page."""
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    user=require_user(request,db)
+    case,card=get_case(db,user,agreement_id)
+    with tempfile.TemporaryDirectory(prefix="cifra_preview_") as folder:
+        work=Path(folder)
+        source=work/"agreement.docx"
+        source.write_bytes(build_docx(case,card).getvalue())
+        result=subprocess.run(
+            ["libreoffice","-env:UserInstallation=file://"+str(work/"profile"),
+             "--headless","--convert-to","pdf:writer_pdf_Export",
+             "--outdir",str(work),str(source)],
+            capture_output=True,text=True,timeout=75,check=False)
+        output=work/"agreement.pdf"
+        if result.returncode!=0 or not output.exists():
+            raise HTTPException(503,"Предпросмотр временно недоступен")
+        data=output.read_bytes()
+    return StreamingResponse(io.BytesIO(data),media_type="application/pdf",
+        headers={"Content-Disposition":"inline","Cache-Control":"private, no-store",
+                 "Content-Security-Policy":"sandbox allow-same-origin"})
+
 @router.get("/agreements/{agreement_id}/generate-pdf")
 def download_pdf(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     """Render the exact same DOCX document to PDF using LibreOffice."""
