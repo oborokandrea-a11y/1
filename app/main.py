@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
 from .settings import settings, ROOT
-from .models import User, Agreement, Attachment, Task, AuditEvent, PartnerInvite, AgreementNote, BaselineObservation, LoginAttempt, CompanyCard
+from .models import User, Agreement, Attachment, Task, AuditEvent, PartnerInvite, AgreementNote, BaselineObservation, LoginAttempt, CompanyCard, QualifiedSignature
 from .security import (ROLE_LABELS, STAFF_ROLES, MANAGE_ROLES, hash_password, verify_password,
                        current_user, require_user, require_role, can_view_agreement, can_upload_agreement,
                        csrf_token, require_csrf, validate_password)
@@ -34,6 +34,8 @@ from .services import (STATUS_LABELS, STATUS_STEPS, ACTIONS_LABELS, log_event,
 from .storage import save_file, get_file, validate_file, safe_filename
 
 app=FastAPI(title="Цифра — ЭДО практики",docs_url=None,redoc_url=None,openapi_url=None)
+from .ukep_routes import router as ukep_router
+app.include_router(ukep_router)
 allowed_hosts=[x.strip() for x in settings.ALLOWED_HOSTS.split(",") if x.strip()]
 if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
     allowed_hosts.append(os.environ["RENDER_EXTERNAL_HOSTNAME"])
@@ -258,7 +260,9 @@ def agreement_detail(request:Request,agreement_id:int,db:Session=Depends(get_db)
     has_card=db.scalar(select(CompanyCard.id).where(CompanyCard.agreement_id==obj.id).limit(1)) is not None
     pdf_files=[f for f in files if f.filename.lower().endswith(".pdf")]
     preview_url=(f"/agreements/{obj.id}/preview-pdf" if has_card else (f"/files/{pdf_files[0].id}/preview" if pdf_files else None))
-    return render(request,db,"agreement_detail.html",user,active="agreements",case=obj,files=files,events=events,notes=notes,tasks=tasks,preview_url=preview_url,has_card=has_card,
+    signatures=db.scalars(select(QualifiedSignature).where(QualifiedSignature.agreement_id==obj.id).order_by(QualifiedSignature.created_at)).all()
+    can_ukep=(obj.status=="SIGNING_PENDING" and ((user.role=="OFFICE") or (user.role=="ENTERPRISE" and obj.enterprise_user_id==user.id)) and not any(x.signer_side==("UNIVERSITY" if user.role=="OFFICE" else "ENTERPRISE") for x in signatures))
+    return render(request,db,"agreement_detail.html",user,active="agreements",case=obj,files=files,events=events,notes=notes,tasks=tasks,preview_url=preview_url,has_card=has_card,signatures=signatures,can_ukep=can_ukep,ukep_configured=bool(settings.UKEP_VERIFY_URL and settings.UKEP_VERIFY_TOKEN),
                   allowed_actions=possible_actions(user,obj),actions_labels=ACTIONS_LABELS,
                   allow_upload=can_upload_agreement(user,obj),can_invite=(user.role in STAFF_ROLES and obj.enterprise_user_id is None and obj.status!="COMPLETED"),
                   step_names=display_steps,step_index=step_index)
