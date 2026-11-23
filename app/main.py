@@ -179,6 +179,10 @@ def dashboard(request:Request,db:Session=Depends(get_db)):
     total=db.scalar(select(func.count()).select_from(live_cases.subquery())) or 0
     done=db.scalar(select(func.count()).select_from(live_cases.where(Agreement.status=="COMPLETED").subquery())) or 0
     active=total-done
+    pilot_total=db.scalar(select(func.count(Agreement.id)).where(Agreement.is_demo.is_(True))) or 0
+    pilot_done=db.scalar(select(func.count(Agreement.id)).where(Agreement.is_demo.is_(True),Agreement.status=="COMPLETED")) or 0
+    pilot_stages=db.execute(select(Agreement.status,func.count(Agreement.id)).where(
+        Agreement.is_demo.is_(True)).group_by(Agreement.status)).all()
     tasks=list_tasks(db,user)
     open_tasks=[t for t in tasks if t.status!="DONE"]
     overdue=[t for t in open_tasks if t.due_at and t.due_at<datetime.utcnow()]
@@ -191,7 +195,7 @@ def dashboard(request:Request,db:Session=Depends(get_db)):
     else:
         own=[c.id for c in cases]
         if own:events=db.scalars(select(AuditEvent).where(AuditEvent.entity_type=="agreement",AuditEvent.entity_id.in_(own)).order_by(desc(AuditEvent.id)).limit(7)).all()
-    return render(request,db,"dashboard.html",user,active="dashboard",cases=cases,open_tasks=open_tasks[:5],overdue=len(overdue),total=total,done=done,active_count=active,events=events)
+    return render(request,db,"dashboard.html",user,active="dashboard",cases=cases,open_tasks=open_tasks[:5],overdue=len(overdue),total=total,done=done,active_count=active,events=events,pilot_total=pilot_total,pilot_done=pilot_done,pilot_stages=pilot_stages)
 
 @app.get("/agreements",response_class=HTMLResponse)
 def agreements(request:Request,db:Session=Depends(get_db)):
