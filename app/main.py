@@ -105,8 +105,8 @@ def as_date(value):
     except ValueError: return None
 
 def scoped_agreements(db,user):
-    stmt=select(Agreement)
-    if user.role=="STUDENT":stmt=stmt.where(Agreement.student_id==user.id,Agreement.is_demo.is_(False))
+    stmt=select(Agreement).where(Agreement.is_demo.is_(False))
+    if user.role=="STUDENT":stmt=stmt.where(Agreement.student_id==user.id)
     elif user.role=="ENTERPRISE":stmt=stmt.where(Agreement.enterprise_user_id==user.id,Agreement.is_demo.is_(False))
     return stmt
 
@@ -174,12 +174,11 @@ def dashboard(request:Request,db:Session=Depends(get_db)):
         return render(request,db,"student_home.html",user,active="dashboard",cases=cases)
     if user.role=="ENTERPRISE":
         return render(request,db,"enterprise_home.html",user,active="dashboard",cases=cases)
-    # Include sample workflows in the interface, without treating them as signed originals.
     visible=scoped_agreements(db,user)
     total=db.scalar(select(func.count()).select_from(visible.subquery())) or 0
     done=db.scalar(select(func.count()).select_from(visible.where(Agreement.status=="COMPLETED").subquery())) or 0
     active=total-done
-    stage_counts=db.execute(select(Agreement.status,func.count(Agreement.id)).group_by(Agreement.status)).all()
+    stage_counts=db.execute(select(Agreement.status,func.count(Agreement.id)).where(Agreement.is_demo.is_(False)).group_by(Agreement.status)).all()
     tasks=list_tasks(db,user)
     open_tasks=[t for t in tasks if t.status!="DONE"]
     overdue=[t for t in open_tasks if t.due_at and t.due_at<datetime.utcnow()]
