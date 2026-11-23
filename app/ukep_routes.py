@@ -69,7 +69,9 @@ async def ukep_sign(request:Request,agreement_id:int,db:Session=Depends(get_db))
     if previous and (previous.attachment_id!=doc.id or previous.document_sha256!=digest):
         raise HTTPException(409,"Документ отличается от уже подписанного")
     try:
-        verified=verify_detached_cades(raw,signature,side)
+        verified=verify_detached_cades(raw,signature,side,
+            "НИТУ МИСИС" if side=="UNIVERSITY" else agreement.company_name,
+            user.full_name)
     except (ValueError,RuntimeError) as exc:
         raise HTTPException(422,str(exc))
     except Exception:
