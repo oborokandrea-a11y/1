@@ -480,7 +480,7 @@ def overlay_demo_marks_pdf(pdf_bytes,case):
                                  if hit.y0 > page.rect.height*0.62)
         # When no text is searchable, use the existing lower signature area
         # only for the two appendices, with one mark per side.
-        if not positions and page_number in (5,6):
+        if not positions and page_number in (4,5,6):
             y=page.rect.height*0.83
             positions=[fitz.Rect(page.rect.width*0.24,y,page.rect.width*0.24+1,y+1),
                        fitz.Rect(page.rect.width*0.73,y,page.rect.width*0.73+1,y+1)]
