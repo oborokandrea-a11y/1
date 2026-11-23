@@ -267,7 +267,10 @@ async def agreement_transition(request:Request,agreement_id:int,db:Session=Depen
     f=await request.form();require_csrf(request,f)
     action=str(f.get("action",""))
     advance_agreement(db,user,obj,action)
-    db.commit();notify(request,"Статус согласования обновлён; событие записано в историю.")
+    db.commit()
+    from .integrations import notify_transition
+    notify_transition(db,obj)
+    notify(request,"Статус согласования обновлён; событие записано в историю.")
     return go(f"/agreements/{obj.id}")
 
 @app.post("/agreements/{agreement_id}/upload")
