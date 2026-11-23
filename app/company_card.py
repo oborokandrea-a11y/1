@@ -164,11 +164,31 @@ def add_demo_sections(doc, case, card):
     line("Контакт предприятия", card.company_phone or "Не указан")
     line("Реквизиты предприятия", "ИНН: ДЕМО; КПП: ДЕМО; ОГРН: ДЕМО; БИК: ДЕМО; расчётный счёт: ДЕМО")
     doc.add_paragraph("7. Подписи сторон")
+    # Render visible blue sample seals in DOCX; LibreOffice carries them into PDF.
+    from PIL import Image, ImageDraw, ImageFont
+    from docx.shared import Cm
+    import math
+    stamp=Image.new("RGB",(480,480),"white")
+    draw=ImageDraw.Draw(stamp)
+    blue=(23,76,173)
+    for inset,width in ((12,7),(30,3),(72,4)):
+        draw.ellipse((inset,inset,480-inset,480-inset),outline=blue,width=width)
+    font_path="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    font=ImageFont.truetype(font_path,32)
+    small=ImageFont.truetype(font_path,20)
+    for y,label,f in ((170,"ОБРАЗЕЦ",font),(235,"УЧЕБНАЯ ПЕЧАТЬ",small),
+                       (274,"НЕ ИМЕЕТ",small),(304,"ЮРИДИЧЕСКОЙ СИЛЫ",small)):
+        draw.text((240,y),label,fill=blue,font=f,anchor="mm")
+    stamp_bytes=io.BytesIO()
+    stamp.save(stamp_bytes,format="PNG")
+    stamp_bytes.seek(0)
     for party, person in (("Университет", card.university_contact or "Учебный представитель"),
                           ("Предприятие", card.director_name or "Учебный представитель")):
         line(party, person)
         doc.add_paragraph("[ОБРАЗЕЦ ЭЛЕКТРОННОЙ ПОДПИСИ — НЕ ЯВЛЯЕТСЯ ЭП]")
         doc.add_paragraph("[МАКЕТ ПЕЧАТИ — НЕ ЯВЛЯЕТСЯ ПЕЧАТЬЮ]")
+        stamp_bytes.seek(0)
+        doc.add_picture(stamp_bytes,width=Cm(3.8))
     doc.add_page_break()
     doc.add_paragraph("Приложение № 1. Задание на практическую подготовку")
     for label, value in (("Обучающийся", card.student_name), ("Группа", card.group_name),
