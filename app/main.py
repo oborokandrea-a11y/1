@@ -98,8 +98,8 @@ def as_date(value):
 
 def scoped_agreements(db,user):
     stmt=select(Agreement)
-    if user.role=="STUDENT":stmt=stmt.where(Agreement.student_id==user.id)
-    elif user.role=="ENTERPRISE":stmt=stmt.where(Agreement.enterprise_user_id==user.id)
+    if user.role=="STUDENT":stmt=stmt.where(Agreement.student_id==user.id,Agreement.is_demo.is_(False))
+    elif user.role=="ENTERPRISE":stmt=stmt.where(Agreement.enterprise_user_id==user.id,Agreement.is_demo.is_(False))
     return stmt
 
 def read_case(db,user,agreement_id):
@@ -111,7 +111,7 @@ def read_case(db,user,agreement_id):
 def list_tasks(db,user):
     q=select(Task)
     if user.role in {"STUDENT","ENTERPRISE"}:
-        q=q.where(Task.assigned_to_id==user.id)
+        q=q.join(Agreement,Task.agreement_id==Agreement.id).where(Task.assigned_to_id==user.id,Agreement.is_demo.is_(False))
     return db.scalars(q.order_by(Task.due_at,desc(Task.id))).all()
 
 @app.get("/",response_class=HTMLResponse)
@@ -345,6 +345,9 @@ async def task_state(request:Request,task_id:int,db:Session=Depends(get_db)):
     user=require_user(request,db);t=db.get(Task,task_id)
     if not t:raise HTTPException(404,"Задача не найдена")
     if user.id!=t.assigned_to_id and user.role not in STAFF_ROLES: raise HTTPException(403,"Нет доступа")
+    if user.role in {"STUDENT","ENTERPRISE"}:
+        linked=db.get(Agreement,t.agreement_id) if t.agreement_id else None
+        if not linked or not can_view_agreement(user,linked):raise HTTPException(403,"Нет доступа")
     f=await request.form();require_csrf(request,f)
     state=str(f.get("state",""))
     if state not in {"TODO","IN_PROGRESS","DONE"}:raise HTTPException(422,"Недопустимый статус")
