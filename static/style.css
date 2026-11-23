@@ -2,3 +2,46 @@
 @media(max-width:1220px){.hero h1{font-size:50px}.content-grid.two-one{grid-template-columns:1.6fr 1fr}.stat-card{padding:17px}.main-content{padding:25px}}
 @media(max-width:1000px){.sidebar{width:210px}.workspace{margin-left:210px}.account-role{display:none}.content-grid.two-one{grid-template-columns:1fr}.stat-grid{grid-template-columns:repeat(2,1fr)}.hero-inner{gap:15px}.hero h1{font-size:42px}.process-road{grid-template-columns:repeat(3,1fr)}.task-create{grid-template-columns:repeat(2,1fr)}.task-create .task-wide{grid-column:span 2}}
 @media(max-width:760px){.public-header{height:74px;padding:0 18px}.public-header nav>a:not(.btn){display:none}.hero-inner{grid-template-columns:1fr;padding:32px 22px 50px}.hero h1{font-size:43px}.hero-visual{display:none}.hero-facts{gap:21px}.marketing-section,.process-section{padding:65px 22px}.feature-grid,.process-road{grid-template-columns:1fr}.marketing-section h2,.process-section h2{font-size:31px}.login-wrap{grid-template-columns:1fr;gap:32px;margin:33px auto}.login-info h1{font-size:38px}.login-info p{font-size:13px}.login-card{padding:28px}.sidebar{transform:translateX(-100%);transition:transform .2s ease;width:255px}.sidebar.open{transform:translateX(0)}.workspace{margin-left:0}.topbar{padding:0 17px}.mobile-menu{display:block}.account-name{display:none}.main-content{padding:22px 14px 55px}.page-heading{align-items:flex-start}.page-heading h1{font-size:28px}.stat-grid{gap:11px}.stat-card{min-height:110px;padding:17px}.stat-card strong{font-size:28px}.panel-header{padding:17px}.steps-line{overflow:auto}.step{min-width:85px}.form-two{grid-template-columns:1fr}.filter-form{flex-wrap:wrap}.filter-form input{flex:1 1 100%}.filter-form select{max-width:none;flex:1}.task-create{grid-template-columns:1fr}.task-create .task-wide,.task-create .two-span{grid-column:auto}.feature-grid.modules-grid{grid-template-columns:1fr}.analytics-section-head{align-items:flex-start;gap:10px;flex-direction:column}.account-info{gap:6px}.app-footer{padding:15px}}
+
+/* ЦИФРА — institutional design system, November 2026.
+   Restrained academic interface: deep MISIS-inspired blues, Arial, flat surfaces. */
+:root{--navy:#102b51;--navy-dark:#091c36;--ink:#1c304a;--muted:#5b6d83;--cream:#f2f5fa;--paper:#fff;--border:#d8e1ed;--blue:#174c8a;--teal:#174c8a;--teal-light:#e9f1fa;--gold:#426c9c;--rose:#6c819c;--shadow:0 1px 4px rgba(13,37,69,.045);--radius:5px}
+html,body,button,input,select,textarea{font-family:Arial,'Helvetica Neue',Helvetica,sans-serif!important}
+body{background:#f2f5fa;color:#1c304a;font-size:14px;line-height:1.5}
+h1,h2,h3,h4,.brand,.brand-logo,.hero-facts strong{font-family:Arial,'Helvetica Neue',Helvetica,sans-serif!important;letter-spacing:-.015em!important}
+h1{font-size:31px;font-weight:700;line-height:1.25}
+h2{font-size:20px;font-weight:700}
+h3{font-size:17px;font-weight:700}
+.hero h1{font-size:48px;line-height:1.14;letter-spacing:-.025em!important}
+.brand{font-size:23px;letter-spacing:0!important}
+.brand-logo{font-size:22px;background:#e5eef9;color:#164a83;border:1px solid #c8d7e9;border-radius:4px}
+.brand small{letter-spacing:.07em;color:#667e9c}
+a{color:#164b85}a:hover{color:#0b315b}
+.sidebar{background:#102b51}
+.sidebar .brand-logo{background:#23466f;color:#fff;border-color:#41648d}
+.topbar{background:#fff;border-bottom:1px solid #d8e1ed}
+.panel,.stat-card,.login-card,.hero-window,.feature-card,.module-card,.info-panel,.floating-note,.note-soft{border-radius:5px!important;box-shadow:0 1px 4px rgba(13,37,69,.045)!important}
+.btn{border-radius:4px;font-weight:600;transition:background-color .12s ease,border-color .12s ease;box-shadow:none!important}
+.btn:hover{transform:none!important}
+.btn-primary{background:#174c8a;border-color:#174c8a}
+.btn-primary:hover{background:#103969;border-color:#103969}
+.btn-secondary{background:#eaf0f8;border-color:#cbd9e9;color:#214b79}
+.btn-outline{border-color:#aabed4}
+.status-pill{border-radius:3px}
+.status-pill.done{background:#e8f1fa;color:#1e568a}
+.status-pill.inprogress{background:#eaf1fb;color:#285b93}
+.status-pill.revision{background:#f1f4f8;color:#4e6680}
+.kicker,.eyebrow,.section-kicker{color:#2d5c8f;letter-spacing:.1em;font-weight:700}
+.hero{background:linear-gradient(130deg,#f4f7fc,#eaf1fa)}
+.hero-window{transform:none!important}
+.spark{background:#174c8a}
+.mock-progress{background:#f0f5fc}
+.mock-progress b.done-mark{background:#174c8a;border-color:#174c8a}
+.mock-event>span{background:#e8f0fa;color:#174c8a}
+.floating-note>span,.floating-note b,em{color:#174c8a}
+input:focus,select:focus,textarea:focus{border-color:#356ba7!important;box-shadow:0 0 0 2px rgba(53,107,167,.12)}
+input,select,textarea{border-radius:4px!important}
+.table-scroll th,table th{color:#315374}
+.alert{background:#eaf2fb;border-color:#cadced;color:#174c8a}
+.alert-danger{background:#fff2f0;border-color:#e9c9c5;color:#a13c35}
+@media(max-width:760px){.hero h1{font-size:36px}.page-heading h1{font-size:26px}}
