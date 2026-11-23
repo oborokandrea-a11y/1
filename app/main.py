@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
 from .settings import settings, ROOT
-from .models import User, Agreement, Attachment, Task, AuditEvent, PartnerInvite, AgreementNote, BaselineObservation, LoginAttempt, CompanyCard, QualifiedSignature
+from .models import User, Agreement, Attachment, Task, AuditEvent, PartnerInvite, AgreementNote, BaselineObservation, LoginAttempt, CompanyCard, QualifiedSignature, DocumentTemplate
 from .security import (ROLE_LABELS, STAFF_ROLES, MANAGE_ROLES, hash_password, verify_password,
                        current_user, require_user, require_role, can_view_agreement, can_upload_agreement,
                        csrf_token, require_csrf, validate_password)
@@ -451,6 +451,40 @@ def team(request:Request,db:Session=Depends(get_db)):
     user=require_user(request,db);require_role(user,{"MANAGER","OFFICE","COORDINATOR"})
     users=db.scalars(select(User).order_by(User.role,User.full_name)).all()
     return render(request,db,"team.html",user,active="team",users=users)
+
+@app.post("/team/document-template")
+async def upload_practice_template(request:Request,db:Session=Depends(get_db)):
+    user=require_user(request,db)
+    require_role(user,{"MANAGER"})
+    form=await request.form()
+    require_csrf(request,form)
+    uploaded=form.get("file")
+    if not uploaded or not hasattr(uploaded,"read"):
+        raise HTTPException(422,"Выберите типовой договор DOCX")
+    filename=str(uploaded.filename or "")
+    if not filename.lower().endswith(".docx"):
+        raise HTTPException(422,"Допускается только DOCX")
+    data=await uploaded.read(3_000_001)
+    if not data.startswith(b"PK\\x03\\x04") or len(data)>3_000_000:
+        raise HTTPException(422,"Некорректный файл DOCX")
+    from docx import Document
+    try:
+        document=Document(io.BytesIO(data))
+        source=" ".join(c.text for t in document.tables for row in t.rows for c in row.cells)
+        for required in ("{{company_full_name}}","{{contract_number}}","{{student_name}}"):
+            if required not in source:raise ValueError("Отсутствует поле "+required)
+    except Exception as exc:
+        raise HTTPException(422,"Неверная структура типового договора: "+str(exc))
+    key=save_file(0,"practice_agreement.docx",data,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    item=DocumentTemplate(template_kind="practice_agreement",filename=safe_filename(filename),
+        object_key=key,sha256=hashlib.sha256(data).hexdigest(),uploaded_by_id=user.id)
+    db.add(item)
+    log_event(db,user,"template_uploaded","template",0,
+              "Установлен типовой договор; контрольная сумма "+item.sha256)
+    db.commit()
+    notify(request,"Типовой договор установлен. Новые документы формируются по его полному тексту.")
+    return go("/team")
 
 @app.post("/team/new")
 async def new_user(request:Request,db:Session=Depends(get_db)):
