@@ -78,7 +78,7 @@ async def ukep_sign(request:Request,agreement_id:int,db:Session=Depends(get_db))
     key=save_file(agreement.id,"qualified_signature.sig",signature_bytes,"application/pkcs7-signature")
     db.add(QualifiedSignature(agreement_id=agreement.id,attachment_id=doc.id,
         signed_by_id=user.id,signer_side=side,document_sha256=digest,
-        signature_object_key=key,**verified))
+        signature_object_key=key,**{k:v for k,v in verified.items() if k!="document_sha256"}))
     db.flush()
     log_event(db,user,"ukep_verified","agreement",agreement.id,
         "Криптографическая проверка УКЭП пройдена: "+side+
