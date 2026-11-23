@@ -572,6 +572,9 @@ def activate(request:Request,token:str,db:Session=Depends(get_db)):
 
 @app.post("/activate/{token}")
 async def activate_post(request:Request,token:str,db:Session=Depends(get_db)):
+    existing=current_user(request,db)
+    if existing and existing.role=="ENTERPRISE":
+        raise HTTPException(409,"Используйте подключение к существующему кабинету предприятия")
     f=await request.form();require_csrf(request,f)
     digest=hashlib.sha256(token.encode()).hexdigest()
     invite=db.scalar(select(PartnerInvite).where(PartnerInvite.token_sha256==digest))
