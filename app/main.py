@@ -58,6 +58,30 @@ templates.env.filters["display_updated_date"]=display_updated_date
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(engine)
+    seed_demo_tasks()
+
+def seed_demo_tasks():
+    """Create idempotent, explicitly training-only assignments for demo accounts."""
+    from .database import SessionLocal
+    with SessionLocal() as db:
+        users=db.scalars(select(User).where(User.is_active.is_(True))).all()
+        for user in users:
+            # Do not invent work obligations for real users.
+            if not (str(user.username or "").lower().startswith(("demo","test"))):
+                continue
+            existing=db.scalar(select(func.count(Task.id)).where(Task.assigned_to_id==user.id))
+            if existing:
+                continue
+            labels=[
+                ("[Учебное] Проверить реквизиты договора","Проверить стороны, контактные данные, адреса и приложения."),
+                ("[Учебное] Согласовать договор","Проверить документ и направить замечания либо согласовать."),
+                ("[Учебное] Подготовить электронное подписание","Проверить окончательный PDF и доступность сертификата УКЭП.")
+            ]
+            for index,(title,details) in enumerate(labels):
+                db.add(Task(title=title,details=details,created_by_id=user.id,
+                            assigned_to_id=user.id,due_at=datetime(2026,11,25)+timedelta(days=index),
+                            priority="high" if index==2 else "normal",status="TODO"))
+        db.commit()
 
 @app.middleware("http")
 async def security_headers(request,call_next):
@@ -145,9 +169,10 @@ def read_case(db,user,agreement_id):
     return case
 
 def list_tasks(db,user):
-    q=select(Task)
+    q=select(Task).where(Task.assigned_to_id==user.id)
     if user.role in {"STUDENT","ENTERPRISE"}:
-        q=q.join(Agreement,Task.agreement_id==Agreement.id).where(Task.assigned_to_id==user.id,Agreement.is_demo.is_(False))
+        q=q.outerjoin(Agreement,Task.agreement_id==Agreement.id).where(
+            or_(Task.agreement_id.is_(None),Agreement.is_demo.is_(False)))
     return db.scalars(q.order_by(Task.due_at,desc(Task.id))).all()
 
 @app.get("/",response_class=HTMLResponse)
