@@ -83,8 +83,8 @@ async def submit(request:Request,db:Session=Depends(get_db)):
 def get_case(db,user,agreement_id):
     case=db.get(Agreement,agreement_id)
     if not case:raise HTTPException(404,"Договор не найден")
-    if user.role=="STUDENT" and case.student_id!=user.id:raise HTTPException(403,"Нет доступа")
-    if user.role=="ENTERPRISE" and case.enterprise_user_id!=user.id:raise HTTPException(403,"Нет доступа")
+    if user.role=="STUDENT" and (case.student_id!=user.id or case.is_demo):raise HTTPException(403,"Нет доступа")
+    if user.role=="ENTERPRISE" and (case.enterprise_user_id!=user.id or case.is_demo):raise HTTPException(403,"Нет доступа")
     card=db.scalar(select(CompanyCard).where(CompanyCard.agreement_id==case.id))
     if not card:raise HTTPException(404,"Карточка предприятия не заполнена")
     return case,card
