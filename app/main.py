@@ -536,11 +536,27 @@ async def create_partner_invite(request:Request,db:Session=Depends(get_db)):
     case=db.get(Agreement,case_id)
     if not case or case.status=="COMPLETED" or case.enterprise_user_id:
         notify(request,"Выберите активный договор без назначенного партнёра","error");return go("/partners")
+    # Organization identity is taken from the agreement, never from a free-text form.
+    # A student cannot issue invitations; an authorized university employee must
+    # verify the recipient through the company's independently established contact.
+    if case.is_demo:
+        notify(request,"Для учебных записей приглашения не выдаются","error")
+        return go("/partners")
+    if db.scalar(select(PartnerInvite.id).where(
+        PartnerInvite.agreement_id==case.id,
+        PartnerInvite.redeemed_at.is_(None),
+        PartnerInvite.expires_at>datetime.utcnow()).limit(1)):
+        notify(request,"У этого договора уже есть действующее приглашение. Дождитесь активации или окончания срока.","error")
+        return go("/partners")
+    verified=str(f.get("recipient_verified",""))=="yes"
+    if not verified:
+        notify(request,"Подтвердите проверку официального контакта предприятия","error")
+        return go("/partners")
     token=secrets.token_urlsafe(28)
-    org=str(f.get("organization_name",case.company_name)).strip()[:210] or case.company_name
+    org=case.company_name
     invite=PartnerInvite(agreement_id=case.id,organization_name=org,token_sha256=hashlib.sha256(token.encode()).hexdigest(),
                           created_by_id=user.id,expires_at=datetime.utcnow()+timedelta(hours=48))
-    db.add(invite);db.flush();log_event(db,user,"partner_invite_created","agreement",case.id,f"Приглашение №{invite.id}, действует 48 часов")
+    db.add(invite);db.flush();log_event(db,user,"partner_invite_created","agreement",case.id,f"Приглашение №{invite.id} для {case.company_name}; официальный контакт проверен сотрудником; действует 48 часов")
     db.commit()
     request.session["new_invite_url"]=settings.BASE_URL.rstrip("/")+f"/activate/{token}"
     notify(request,"Одноразовая ссылка создана. Передайте её партнёру по защищённому каналу.")
@@ -569,8 +585,8 @@ async def activate_post(request:Request,token:str,db:Session=Depends(get_db)):
     if db.scalar(select(User.id).where(User.username==username)):
         notify(request,"Логин занят","error");return go(f"/activate/{token}")
     obj=db.get(Agreement,invite.agreement_id)
-    if not obj or obj.enterprise_user_id:
-        raise HTTPException(403,"Договор уже закреплён за другим пользователем")
+    if not obj or obj.enterprise_user_id or obj.company_name!=invite.organization_name:
+        raise HTTPException(403,"Договор уже закреплён или сведения предприятия изменены")
     u=User(username=username,full_name=full_name,role="ENTERPRISE",password_hash=hash_password(pwd),organization_name=invite.organization_name)
     db.add(u);db.flush();obj.enterprise_user_id=u.id;invite.redeemed_at=datetime.utcnow()
     log_event(db,u,"partner_activated","agreement",obj.id,f"Создан ограниченный доступ предприятия {invite.organization_name}")
