@@ -212,7 +212,27 @@ def dashboard(request:Request,db:Session=Depends(get_db)):
     else:
         own=[c.id for c in cases]
         if own:events=db.scalars(select(AuditEvent).where(AuditEvent.entity_type=="agreement",AuditEvent.entity_id.in_(own)).order_by(desc(AuditEvent.id)).limit(7)).all()
-    return render(request,db,"dashboard.html",user,active="dashboard",cases=cases,open_tasks=open_tasks[:5],overdue=len(overdue),total=total,done=done,active_count=active,events=events,stage_counts=stage_counts)
+    return render(request,db,"dashboard.html",user,active="dashboard",cases=cases,open_tasks=open_tasks[:5],approval_items=signing_approval_items(db,user)[:8],overdue=len(overdue),total=total,done=done,active_count=active,events=events,stage_counts=stage_counts)
+
+def signing_approval_items(db,user):
+    """Live actionable inbox entries, derived from agreement workflow state."""
+    if user.role=="STUDENT":
+        return []
+    cases=db.scalars(scoped_agreements(db,user).where(Agreement.status.notin_(["COMPLETED","REJECTED"])).order_by(desc(Agreement.updated_at)).limit(100)).all()
+    items=[]
+    for case in cases:
+        status=case.status or ""
+        if status=="SIGNING_PENDING":
+            action="Подписать электронной подписью"
+        elif status in {"DRAFT","REVISION_REQUIRED"}:
+            continue
+        else:
+            action="Согласовать договор"
+        items.append({"title":action+" № "+str(case.id),
+                      "agreement_id":case.id,"status":status,
+                      "company":case.company_name})
+    return items
+
 
 @app.get("/agreements",response_class=HTMLResponse)
 def agreements(request:Request,db:Session=Depends(get_db)):
@@ -373,7 +393,7 @@ def tasks(request:Request,db:Session=Depends(get_db)):
     all_tasks=list_tasks(db,user)
     users=db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.full_name)).all() if user.role in STAFF_ROLES else []
     cases=db.scalars(scoped_agreements(db,user).order_by(desc(Agreement.id)).limit(120)).all() if user.role in STAFF_ROLES else []
-    return render(request,db,"tasks.html",user,active="tasks",tasks=all_tasks,users=users,cases=cases,can_create=user.role in STAFF_ROLES)
+    return render(request,db,"tasks.html",user,active="tasks",tasks=all_tasks,approval_items=signing_approval_items(db,user),users=users,cases=cases,can_create=user.role in STAFF_ROLES)
 
 @app.post("/tasks/new")
 async def task_create(request:Request,db:Session=Depends(get_db)):
