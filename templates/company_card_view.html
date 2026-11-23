@@ -7,6 +7,6 @@
 <p>Практика: {{case.practice_start}} — {{case.practice_end}}</p>
 <p>ИНН: {{card.company_inn}} · Подписант: {{card.director_name}}</p>
 <div class="note-soft">Документ содержит основной текст и приложения № 1 и № 2. PDF и Word формируются как неподписанные проекты для проверки и печати. Сверьте текст с актуальной формой вашего университета.</div>
-<div class="form-actions"><a class="btn btn-primary" href="/agreements/{{case.id}}/generate-pdf">Скачать PDF</a><a class="btn btn-secondary" href="/agreements/{{case.id}}/generate-docx">Скачать Word</a><a class="btn btn-secondary" href="/agreements/{{case.id}}">Открыть карточку договора</a></div>
+{% if user.role == "STUDENT" %}{% if case.status in ["DRAFT","REVISION_REQUIRED"] %}<p>Карточка сохранена. Повторно отправлять новую не нужно: можно исправлять эту же карточку.</p><a class="btn btn-secondary" href="/agreements/{{case.id}}/company-card/edit">Редактировать эту карточку</a>{% else %}<p>Карточка на согласовании. Редактирование будет доступно после возврата на доработку.</p>{% endif %}{% endif %}<div class="form-actions"><a class="btn btn-primary" href="/agreements/{{case.id}}/generate-pdf">Скачать PDF</a><a class="btn btn-secondary" href="/agreements/{{case.id}}/generate-docx">Скачать Word</a><a class="btn btn-secondary" href="/agreements/{{case.id}}">Открыть карточку договора</a></div>
 </section>
 {% endblock %}
