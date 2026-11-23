@@ -465,7 +465,7 @@ async def upload_practice_template(request:Request,db:Session=Depends(get_db)):
     if not filename.lower().endswith(".docx"):
         raise HTTPException(422,"Допускается только DOCX")
     data=await uploaded.read(3_000_001)
-    if not data.startswith(b"PK\\x03\\x04") or len(data)>3_000_000:
+    if not data.startswith(b"PK") or len(data)>3_000_000:
         raise HTTPException(422,"Некорректный файл DOCX")
     from docx import Document
     try:
