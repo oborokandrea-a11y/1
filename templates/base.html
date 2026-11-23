@@ -2,7 +2,7 @@
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#13243b">
 <title>{% block title %}Цифра ЭДО | Электронный документооборот{% endblock %}</title>
-<link rel="stylesheet" href="/static/style.css?v=2"><script src="/static/app.js" defer></script>
+<link rel="stylesheet" href="/static/style.css?v=3"><script src="/static/app.js" defer></script>
 </head><body class="{{ 'public-layout' if not user else 'inside-layout' }}">
 {% if user %}
 <div class="app-shell">
@@ -20,7 +20,7 @@
  {% endif %}
  <div class="sidebar-bottom"><span class="online-pulse"></span> Система доступна <small>Система электронного документооборота</small></div>
  </aside>
- <div class="workspace"><header class="topbar"><div class="top-left"><button type="button" class="mobile-menu" aria-label="Меню" data-toggle-sidebar>☰</button><span class="breadcrumb">Цифра <span> / </span> {% block crumb %}Рабочая область{% endblock %}</span></div><div class="account-info"><span class="account-role">{{role_labels.get(user.role)}}</span><a href="/profile" class="account-chip"><span class="avatar">{{ user.full_name[:1] | upper }}</span><span class="account-name">{{user.full_name}}</span></a><form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button class="logout-btn" title="Выйти" aria-label="Выйти">↗</button></form></div></header>
+ <div class="workspace"><header class="topbar"><div class="top-left"><button type="button" class="mobile-menu" aria-label="Меню" data-toggle-sidebar>☰</button><div class="global-search"><span aria-hidden="true">⌕</span><form action="/agreements" method="get"><input name="q" aria-label="Поиск по документам" placeholder="Поиск по документам, предприятиям, номерам…"></form></div></div><div class="account-info"><span class="account-role">{{role_labels.get(user.role)}}</span><a href="/profile" class="account-chip"><span class="avatar">{{ user.full_name[:1] | upper }}</span><span class="account-name">{{user.full_name}}</span></a><form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><button class="logout-btn" title="Выйти" aria-label="Выйти">↗</button></form></div></header>
  <main class="main-content">{% if flash %}<div class="alert {{'alert-danger' if flash.kind=='error' else 'alert-ok'}}">{{flash.message}}</div>{% endif %}{% block content %}{% endblock %}</main>
  <footer class="app-footer">© Цифра · Система электронного документооборота · Согласование не является электронной подписью</footer></div>
  </div>
