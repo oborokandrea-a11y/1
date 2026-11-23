@@ -173,3 +173,19 @@ class AgreementNumberSequence(Base):
     __tablename__ = "agreement_number_sequences"
     year: Mapped[int] = mapped_column(Integer, primary_key=True)
     last_number: Mapped[int] = mapped_column(Integer, nullable=False)
+
+class QualifiedSignature(Base):
+    __tablename__="qualified_signatures"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agreement_id: Mapped[int] = mapped_column(ForeignKey("agreements.id"),index=True)
+    attachment_id: Mapped[int] = mapped_column(ForeignKey("attachments.id"))
+    signed_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    signer_side: Mapped[str] = mapped_column(String(25))
+    document_sha256: Mapped[str] = mapped_column(String(64))
+    signature_object_key: Mapped[str] = mapped_column(String(500),unique=True)
+    certificate_subject: Mapped[str] = mapped_column(String(400))
+    certificate_serial: Mapped[str] = mapped_column(String(120))
+    certificate_issuer: Mapped[str] = mapped_column(String(400))
+    verification_time: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(DateTime,default=now_utc)
+    __table_args__=(UniqueConstraint("agreement_id","signer_side",name="uq_agreement_signer_side"),)
