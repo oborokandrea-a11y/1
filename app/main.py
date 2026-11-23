@@ -271,7 +271,10 @@ def agreement_detail(request:Request,agreement_id:int,db:Session=Depends(get_db)
         if not hasattr(e,"actor_name"):
             e.actor_name=(db.get(User,e.actor_id).full_name if e.actor_id and db.get(User,e.actor_id) else "Система")
     display_steps=(STATUS_STEPS if obj.signing_order=="university_first" else ["DRAFT","STAFF_REVIEW","COORDINATOR_REVIEW","PARTNER_REVIEW","OFFICE_REVIEW","COMPLETED"])
-    step_index=display_steps.index(obj.status) if obj.status in display_steps else 0
+    # УКЭП is part of the final organization's approval stage, not a separate route step.
+    display_steps=[step for step in display_steps if step!="SIGNING_PENDING"]
+    visible_status=("PARTNER_REVIEW" if obj.signing_order=="university_first" else "OFFICE_REVIEW") if obj.status=="SIGNING_PENDING" else obj.status
+    step_index=display_steps.index(visible_status) if visible_status in display_steps else 0
     has_card=db.scalar(select(CompanyCard.id).where(CompanyCard.agreement_id==obj.id).limit(1)) is not None
     pdf_files=[f for f in files if f.filename.lower().endswith(".pdf")]
     preview_url=(f"/agreements/{obj.id}/preview-pdf" if has_card else (f"/files/{pdf_files[0].id}/preview" if pdf_files else None))
