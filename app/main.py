@@ -174,8 +174,10 @@ def dashboard(request:Request,db:Session=Depends(get_db)):
         return render(request,db,"student_home.html",user,active="dashboard",cases=cases)
     if user.role=="ENTERPRISE":
         return render(request,db,"enterprise_home.html",user,active="dashboard",cases=cases)
-    total=db.scalar(select(func.count()).select_from(scoped_agreements(db,user).subquery())) or 0
-    done=db.scalar(select(func.count()).select_from(scoped_agreements(db,user).where(Agreement.status=="COMPLETED").subquery())) or 0
+    # Operational metrics must exclude demonstration cases.
+    live_cases=scoped_agreements(db,user).where(Agreement.is_demo.is_(False))
+    total=db.scalar(select(func.count()).select_from(live_cases.subquery())) or 0
+    done=db.scalar(select(func.count()).select_from(live_cases.where(Agreement.status=="COMPLETED").subquery())) or 0
     active=total-done
     tasks=list_tasks(db,user)
     open_tasks=[t for t in tasks if t.status!="DONE"]
