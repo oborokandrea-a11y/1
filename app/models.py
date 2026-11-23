@@ -189,3 +189,13 @@ class QualifiedSignature(Base):
     verification_time: Mapped[str] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(DateTime,default=now_utc)
     __table_args__=(UniqueConstraint("agreement_id","signer_side",name="uq_agreement_signer_side"),)
+
+class DocumentTemplate(Base):
+    __tablename__="document_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_kind: Mapped[str] = mapped_column(String(60),index=True)
+    filename: Mapped[str] = mapped_column(String(240))
+    object_key: Mapped[str] = mapped_column(String(500),unique=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    uploaded_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime,default=now_utc)
