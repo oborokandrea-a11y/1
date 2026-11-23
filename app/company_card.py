@@ -177,11 +177,11 @@ def add_demo_seals_at_mp(doc):
         if not re.search(r"М\s*\.\s*П\s*\.",paragraph.text,re.I):
             return
         if count>=12:return
-        # An inline drawing in its own run is inserted immediately after the
-        # run containing М.П., rather than appended at the paragraph end.
+        # Floating mark overlays the existing М.П. letters, with no new line
+        # or table-row height. One mark per М.П. paragraph.
         runs=list(paragraph.runs)
         full="".join(run.text for run in runs)
-        match=re.search(r"М\s*\.\s*П\s*\.",full,re.I)
+        match=re.search(r"М\\s*\\.\\s*П\\s*\\.",full,re.I)
         if not match:return
         offset=0
         target=None
@@ -193,8 +193,35 @@ def add_demo_seals_at_mp(doc):
         if target is None:return
         buffer.seek(0)
         pic=paragraph.add_run()
-        pic.add_picture(buffer,width=Cm(1.55))
+        pic.add_picture(buffer,width=Cm(1.15))
         target._r.addnext(pic._r)
+        inline=pic._r.xpath(".//wp:inline")
+        if not inline:return
+        from copy import deepcopy
+        original=inline[0]
+        anchor=OxmlElement("wp:anchor")
+        for key,value in {
+            "distT":"0","distB":"0","distL":"0","distR":"0",
+            "simplePos":"0","relativeHeight":"251659264",
+            "behindDoc":"0","locked":"0","layoutInCell":"1","allowOverlap":"1"
+        }.items():anchor.set(key,value)
+        simple=OxmlElement("wp:simplePos")
+        simple.set("x","0");simple.set("y","0")
+        anchor.append(simple)
+        horizontal=OxmlElement("wp:positionH")
+        horizontal.set("relativeFrom","character")
+        hpos=OxmlElement("wp:posOffset")
+        hpos.text="-800000"
+        horizontal.append(hpos);anchor.append(horizontal)
+        vertical=OxmlElement("wp:positionV")
+        vertical.set("relativeFrom","line")
+        vpos=OxmlElement("wp:posOffset")
+        vpos.text="-500000"
+        vertical.append(vpos);anchor.append(vertical)
+        wrap=OxmlElement("wp:wrapNone");anchor.append(wrap)
+        for child in list(original):
+            anchor.append(deepcopy(child))
+        original.getparent().replace(original,anchor)
         count+=1
     def scan_table(table):
         for row in table.rows:
