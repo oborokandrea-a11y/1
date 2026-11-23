@@ -11,7 +11,7 @@
  {% if user.role == 'STUDENT' %}
  <nav class="sidenav"><a href="/dashboard" class="{{ 'selected' if active=='dashboard' else '' }}">Моя практика</a><a href="/company-card/new">Заполнить карточку предприятия</a></nav>
  {% elif user.role == 'ENTERPRISE' %}
- <nav class="sidenav"><a href="/dashboard" class="{{ 'selected' if active=='dashboard' else '' }}">Мои договоры</a><a href="/tasks" class="{{ 'selected' if active=='tasks' else '' }}">Мои задачи</a></nav>
+ <nav class="sidenav"><a href="/dashboard" class="{{ 'selected' if active=='dashboard' else '' }}">Мои договоры</a></nav>
  {% else %}
  <nav class="sidenav"><a href="/dashboard">Рабочая панель</a><a href="/agreements">Договоры практики</a><a href="/tasks">Задачи и сроки</a>
  {% if user.role in ['OFFICE','COORDINATOR','MANAGER'] %}<a href="/activity">Журнал событий</a><a href="/analytics">Аналитика</a><a href="/partners">Предприятия</a>{% endif %}
