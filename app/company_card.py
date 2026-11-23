@@ -149,6 +149,47 @@ def show(request:Request,agreement_id:int,db:Session=Depends(get_db)):
     user=require_user(request,db);case,card=get_case(db,user,agreement_id)
     return views.TemplateResponse(request,"company_card_view.html",context(request,user,case=case,card=card))
 
+def add_demo_sections(doc, case, card):
+    """Clearly fictional training details; never a real signature or seal."""
+    from docx.shared import RGBColor
+    def line(label, value):
+        doc.add_paragraph(f"{label}: {value or 'Демонстрационные данные не указаны'}")
+    doc.add_page_break()
+    doc.add_heading("6. Адреса и реквизиты сторон", level=1) if "Heading 1" in doc.styles else doc.add_paragraph("6. Адреса и реквизиты сторон")
+    line("Университет", "Учебный университет «Пример» (вымышленная организация)")
+    line("Адрес университета", "г. Москва, Учебная улица, д. 1 (условный адрес)")
+    line("Реквизиты университета", "ИНН: ДЕМО; КПП: ДЕМО; ОГРН: ДЕМО; расчётный счёт: ДЕМО")
+    line("Предприятие", card.company_full_name or "ООО «Учебное предприятие»")
+    line("Адрес предприятия", card.company_address or "г. Москва, Демонстрационная улица, д. 2 (условный адрес)")
+    line("Контакт предприятия", card.company_phone or "Не указан")
+    line("Реквизиты предприятия", "ИНН: ДЕМО; КПП: ДЕМО; ОГРН: ДЕМО; БИК: ДЕМО; расчётный счёт: ДЕМО")
+    doc.add_paragraph("7. Подписи сторон")
+    for party, person in (("Университет", card.university_contact or "Учебный представитель"),
+                          ("Предприятие", card.director_name or "Учебный представитель")):
+        line(party, person)
+        doc.add_paragraph("[ОБРАЗЕЦ ЭЛЕКТРОННОЙ ПОДПИСИ — НЕ ЯВЛЯЕТСЯ ЭП]")
+        doc.add_paragraph("[МАКЕТ ПЕЧАТИ — НЕ ЯВЛЯЕТСЯ ПЕЧАТЬЮ]")
+    doc.add_page_break()
+    doc.add_paragraph("Приложение № 1. Задание на практическую подготовку")
+    for label, value in (("Обучающийся", card.student_name), ("Группа", card.group_name),
+                         ("Программа", card.program), ("Вид практики", case.practice_type),
+                         ("Начало", case.practice_start), ("Окончание", case.practice_end),
+                         ("Руководитель от университета", card.university_contact),
+                         ("Руководитель от предприятия", card.contact_name)):
+        line(label, value)
+    doc.add_paragraph("Учебные задачи: знакомство с организацией, анализ процессов, подготовка отчёта и рекомендаций.")
+    doc.add_paragraph("Приложение № 2. Список обучающихся")
+    line("Обучающийся", card.student_name)
+    line("Группа", card.group_name)
+    line("Период практики", f"{case.practice_start or 'не указан'} — {case.practice_end or 'не указан'}")
+    for section in doc.sections:
+        section.footer.paragraphs[0].text = "ДЕМОНСТРАЦИОННЫЙ ОБРАЗЕЦ — НЕ ИМЕЕТ ЮРИДИЧЕСКОЙ СИЛЫ"
+    notice=doc.add_paragraph("ДЕМОНСТРАЦИОННЫЙ ОБРАЗЕЦ. НЕТ ДЕЙСТВИТЕЛЬНЫХ ЭЛЕКТРОННЫХ ПОДПИСЕЙ И ПЕЧАТЕЙ.")
+    for run in notice.runs:
+        run.bold=True
+        run.font.color.rgb=RGBColor(160,0,0)
+
+
 def build_demo_docx(case,card):
     """Clearly marked test-only document, never an official agreement."""
     doc=Document()
@@ -168,6 +209,7 @@ def build_demo_docx(case,card):
     ]:
         doc.add_paragraph(f"{label}: {value or 'Не указано'}")
     doc.add_paragraph("Реальные согласования и электронные подписи отсутствуют.")
+    add_demo_sections(doc,case,card)
     buffer=io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -307,6 +349,8 @@ def build_docx(case,card):
             run.bold=True
             run.font.size=Pt(9)
             run.font.color.rgb=RGBColor(150,0,0)
+    if case.is_demo:
+        add_demo_sections(doc,case,card)
     buffer=io.BytesIO()
     doc.save(buffer);buffer.seek(0)
     return buffer
