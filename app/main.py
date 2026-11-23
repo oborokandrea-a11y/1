@@ -203,6 +203,10 @@ def agreements(request:Request,db:Session=Depends(get_db)):
     if user.role=="STUDENT":return go("/dashboard")
     status=request.query_params.get("status","")
     q=scoped_agreements(db,user)
+    if request.query_params.get("pilot")=="1" and user.role in STAFF_ROLES:
+        q=q.where(Agreement.is_demo.is_(True))
+    elif user.role in STAFF_ROLES:
+        q=q.where(Agreement.is_demo.is_(False))
     if status in STATUS_LABELS:q=q.where(Agreement.status==status)
     search=request.query_params.get("q","").strip()[:120]
     if search:q=q.where(or_(Agreement.reference.ilike(f"%{search}%"),Agreement.title.ilike(f"%{search}%"),Agreement.company_name.ilike(f"%{search}%")))
