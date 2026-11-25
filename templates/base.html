@@ -6,7 +6,7 @@
 </head><body class="{{ 'public-layout' if not user else 'inside-layout' }}">
 {% if user %}
 <div class="app-shell">
- <aside class="sidebar" id="sidebar"><a class="brand brand-sidebar" href="/dashboard"><span class="brand-logo">Ц</span><span>Цифра<small>ДОГОВОРЫ ПРАКТИКИ</small></span></a>
+ <aside class="sidebar" id="sidebar"><a class="brand brand-sidebar" href="/dashboard"><span class="brand-logo" aria-hidden="true" style="background:linear-gradient(145deg,#2878e8,#174b92);display:inline-flex;align-items:center;justify-content:center"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 5v17h15V5M22 22h4v5" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m12 13 4 4 8-9" stroke="#a9e9ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Цифра</span></a>
  <div class="nav-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
  {% if user.role == 'STUDENT' %}
  <nav class="sidenav"><a href="/dashboard" class="{{ 'selected' if active=='dashboard' else '' }}">Моя практика</a><a href="/company-card/new">Заполнить карточку предприятия</a></nav>
@@ -25,7 +25,7 @@
  <footer class="app-footer">© Цифра · Система электронного документооборота · Согласование не является электронной подписью</footer></div>
  </div>
 {% else %}
-<header class="public-header"><a href="/" class="brand"><span class="brand-logo">Ц</span><span>Цифра<small>ДОКУМЕНТЫ И СОГЛАСОВАНИЕ</small></span></a><nav><a href="/#features">Возможности</a><a href="/#process">Процесс</a><a href="/login" class="btn btn-primary btn-small">Войти в кабинет ↗</a></nav></header>
+<header class="public-header"><a href="/" class="brand"><span class="brand-logo" aria-hidden="true" style="background:linear-gradient(145deg,#2878e8,#174b92);display:inline-flex;align-items:center;justify-content:center"><svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 5v17h15V5M22 22h4v5" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="m12 13 4 4 8-9" stroke="#a9e9ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>Цифра</span></a><nav><a href="/#features">Возможности</a><a href="/#process">Процесс</a><a href="/login" class="btn btn-primary btn-small">Войти в кабинет ↗</a></nav></header>
 {% if flash %}<div class="public-alert alert {{'alert-danger' if flash.kind=='error' else 'alert-ok'}}">{{flash.message}}</div>{% endif %}
 {% block public_content %}{% endblock %}
 <footer class="public-footer">© Цифра · Система электронного документооборота</footer>
